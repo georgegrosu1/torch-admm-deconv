@@ -19,7 +19,7 @@ class Metric(ABC):
 class SSIMLoss(Metric):
     m_name = 'ssim_loss'
 
-    def __init__(self, data_range):
+    def __init__(self, data_range=1.0):
         super().__init__()
         self._func = StructuralSimilarityIndexMeasure(data_range=data_range)
 
@@ -30,7 +30,7 @@ class SSIMLoss(Metric):
 class MSSSIMLoss(Metric):
     m_name = 'mssssim_loss'
 
-    def __init__(self, data_range):
+    def __init__(self, data_range=1.0):
         super().__init__()
         self._func = MultiScaleStructuralSimilarityIndexMeasure(data_range=data_range)
 
@@ -41,7 +41,7 @@ class MSSSIMLoss(Metric):
 class SSIMMetric(Metric):
     m_name = 'ssim'
 
-    def __init__(self, data_range):
+    def __init__(self, data_range=1.0):
         super().__init__()
         self._func = StructuralSimilarityIndexMeasure(data_range=data_range)
 
@@ -52,7 +52,7 @@ class SSIMMetric(Metric):
 class MSSSIMMetric(Metric):
     m_name = 'msssim'
 
-    def __init__(self, data_range):
+    def __init__(self, data_range=1.0):
         super().__init__()
         self._func = MultiScaleStructuralSimilarityIndexMeasure(data_range=data_range)
 
@@ -63,7 +63,7 @@ class MSSSIMMetric(Metric):
 class PSNRMetric(Metric):
     m_name = 'psnr'
 
-    def __init__(self, data_range):
+    def __init__(self, data_range=1.0):
         super().__init__()
         self._func = PeakSignalNoiseRatio(data_range=data_range)
 

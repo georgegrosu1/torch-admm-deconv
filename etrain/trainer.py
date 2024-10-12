@@ -11,20 +11,14 @@ class NNTrainer:
     def __init__(self,
                  loss: Metric,
                  metrics: List[Metric],
-                 optimizer: torch.optim.Optimizer,
-                 saver,
-                 logger,
-                 lr_scheduler: torch.optim.lr_scheduler.LRScheduler,
-                 num_epochs: int):
+                 # saver,
+                 # logger
+                 ):
 
         self.loss = loss
         self.metrics = metrics
-        self.optimizer = optimizer
-        self.saver = saver
-        self.logger = logger
-        self.lr_scheduler = lr_scheduler
-        self.num_epochs = num_epochs
-
+        # self.saver = saver
+        # self.logger = logger
         self._init_stats()
 
 
@@ -35,17 +29,28 @@ class NNTrainer:
                 self._metrics_stats[metric_k.m_name] = {'curr': 0.0, 'cumsum': 0.0}
 
 
-    def train(self, model: torch.nn.Module, train_dataloader: DataLoader):
+    def run(self,
+            model: torch.nn.Module,
+            optimizer: torch.optim.Optimizer,
+            train_dataloader: DataLoader,
+            eval_dataloader: DataLoader = None,
+            lr_scheduler: torch.optim.lr_scheduler.LRScheduler = None):
+
+        self.train(model, train_dataloader, optimizer)
+        self.eval(model, eval_dataloader)
+
+
+    def train(self, model: torch.nn.Module, train_dataloader: DataLoader, optimizer: torch.optim.Optimizer):
         self._init_stats()
         model.train(mode=True)
 
         print('\n\n\n////////////////////////////////////// TRAINING //////////////////////////////////////')
         for batch_idx, (inputs, labels) in tqdm(enumerate(train_dataloader), total=len(train_dataloader)):
-            self.optimizer.zero_grad()
+            optimizer.zero_grad()
             outputs = model(inputs)
             loss = self.loss(outputs, labels)
             loss.backward()
-            self.optimizer.step()
+            optimizer.step()
 
             self._update_performance_stats(loss, outputs, labels)
             self._print_current_metrics()
@@ -57,8 +62,8 @@ class NNTrainer:
         self._metrics_stats[self.loss.m_name]['cumsum'] += loss_res.item()
         for metric_func in self.metrics:
             metric_res = metric_func(outputs, labels).item()
-            self._metrics_stats[metric_func.m_name]['curr'] = metric_res.item()
-            self._metrics_stats[metric_func.m_name]['cumsum'] += metric_res.item()
+            self._metrics_stats[metric_func.m_name]['curr'] = metric_res
+            self._metrics_stats[metric_func.m_name]['cumsum'] += metric_res
 
 
     def _print_current_metrics(self):
