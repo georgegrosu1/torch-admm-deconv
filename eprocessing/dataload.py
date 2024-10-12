@@ -1,3 +1,4 @@
+import numpy as np
 from pathlib import Path
 from typing import List
 from torchvision.io import read_image
@@ -14,8 +15,8 @@ class ImageDataset(Dataset):
         self.y_source = y_source
         self.transforms = transforms
 
-        self.x_paths = list(x_source.glob("*"))
-        self.y_paths = list(y_source.glob("*"))
+        self.x_paths = np.array(list(x_source.glob("*")))
+        self.y_paths = np.array(list(y_source.glob("*")))
 
 
     def __len__(self):
@@ -30,3 +31,7 @@ class ImageDataset(Dataset):
                 x_im, y_im = transform(x_im, y_im)
 
         return x_im, y_im
+
+    def shuffle(self):
+        p = np.random.permutation(len(self.x_paths))
+        return self.x_paths[p], self.y_paths[p]

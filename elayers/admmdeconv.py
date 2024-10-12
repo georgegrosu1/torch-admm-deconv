@@ -41,7 +41,7 @@ class ADMMDeconv(torch.nn.Module):
             self.register_buffer('lmbda', lmbda)
 
 
-    def _init_kernel(self, kern_size):
+    def _init_kernel(self, kern_size: Tuple[int, int]):
         if kern_size:
             kshape = (1, 1, *kern_size)
             self.w = torch.nn.Parameter(torch.empty(kshape), requires_grad=True)
@@ -51,7 +51,7 @@ class ADMMDeconv(torch.nn.Module):
             self.register_buffer('w', w)
 
 
-    def _init_bias(self, bias):
+    def _init_bias(self, bias: bool):
         if bias:
             self.b = torch.nn.Parameter(torch.empty(1,), requires_grad=True)
             torch.nn.init.uniform_(self.b, a=0.0, b=1.0)
@@ -60,5 +60,5 @@ class ADMMDeconv(torch.nn.Module):
             self.register_buffer('b', b)
 
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.activation(fft_admm_tv(x, self.lmbda, self.rho, self.w, self.iso, self.max_iters) + self.b)
