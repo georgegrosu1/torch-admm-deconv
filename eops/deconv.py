@@ -17,7 +17,7 @@ def soft_thresh(x: torch.Tensor, tau: float) -> torch.Tensor:
 
 
 def block_thresh(x: torch.Tensor, tau: torch.Tensor) -> torch.Tensor:
-    return torch.maximum(1 - tau / pixelnorm(x), torch.tensor([0])) * x
+    return torch.maximum(1 - tau / pixelnorm(x), torch.tensor([0], dtype=x.dtype, device=x.device)) * x
 
 
 def pixelnorm(x: torch.Tensor) -> torch.Tensor:
