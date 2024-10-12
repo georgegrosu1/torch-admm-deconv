@@ -19,9 +19,9 @@ class Metric(ABC):
 class SSIMLoss(Metric):
     m_name = 'ssim_loss'
 
-    def __init__(self, data_range=1.0):
+    def __init__(self, device: str, data_range=1.0):
         super().__init__()
-        self._func = StructuralSimilarityIndexMeasure(data_range=data_range)
+        self._func = StructuralSimilarityIndexMeasure(data_range=data_range).to(device)
 
     def __call__(self, y_true, y_pred):
         return 1.0 - self._func(y_true, y_pred)
@@ -30,9 +30,9 @@ class SSIMLoss(Metric):
 class MSSSIMLoss(Metric):
     m_name = 'mssssim_loss'
 
-    def __init__(self, data_range=1.0):
+    def __init__(self, device: str, data_range=1.0):
         super().__init__()
-        self._func = MultiScaleStructuralSimilarityIndexMeasure(data_range=data_range)
+        self._func = MultiScaleStructuralSimilarityIndexMeasure(data_range=data_range).to(device)
 
     def __call__(self, y_true, y_pred):
         return 1 - self._func(y_true, y_pred)
@@ -41,9 +41,9 @@ class MSSSIMLoss(Metric):
 class SSIMMetric(Metric):
     m_name = 'ssim'
 
-    def __init__(self, data_range=1.0):
+    def __init__(self, device: str, data_range=1.0):
         super().__init__()
-        self._func = StructuralSimilarityIndexMeasure(data_range=data_range)
+        self._func = StructuralSimilarityIndexMeasure(data_range=data_range).to(device)
 
     def __call__(self, y_true, y_pred):
         return self._func(y_true, y_pred)
@@ -52,9 +52,9 @@ class SSIMMetric(Metric):
 class MSSSIMMetric(Metric):
     m_name = 'msssim'
 
-    def __init__(self, data_range=1.0):
+    def __init__(self, device: str, data_range=1.0):
         super().__init__()
-        self._func = MultiScaleStructuralSimilarityIndexMeasure(data_range=data_range)
+        self._func = MultiScaleStructuralSimilarityIndexMeasure(data_range=data_range).to(device)
 
     def __call__(self, y_true, y_pred):
         return self._func(y_true, y_pred)
@@ -63,9 +63,9 @@ class MSSSIMMetric(Metric):
 class PSNRMetric(Metric):
     m_name = 'psnr'
 
-    def __init__(self, data_range=1.0):
+    def __init__(self, device: str, data_range=1.0):
         super().__init__()
-        self._func = PeakSignalNoiseRatio(data_range=data_range)
+        self._func = PeakSignalNoiseRatio(data_range=data_range).to(device)
 
     def __call__(self, y_true, y_pred):
         return self._func(y_true, y_pred)
@@ -74,9 +74,9 @@ class PSNRMetric(Metric):
 class UIQMetric(Metric):
     m_name = 'uiq'
 
-    def __init__(self):
+    def __init__(self, device: str):
         super().__init__()
-        self._func = UniversalImageQualityIndex()
+        self._func = UniversalImageQualityIndex().to(device)
 
     def __call__(self, y_true, y_pred):
         return self._func(y_true, y_pred)
@@ -85,9 +85,9 @@ class UIQMetric(Metric):
 class SCCMetric(Metric):
     m_name = 'scc'
 
-    def __init__(self):
+    def __init__(self, device: str):
         super().__init__()
-        self._func = SpatialCorrelationCoefficient()
+        self._func = SpatialCorrelationCoefficient().to(device)
 
     def __call__(self, y_true, y_pred):
         return self._func(y_true, y_pred)

@@ -11,11 +11,13 @@ class ImageDataset(Dataset):
     def __init__(self,
                  x_source: Path,
                  y_source: Path,
-                 transforms: List=None):
+                 transforms: List=None,
+                 device: str='cpu'):
 
         self.x_source = x_source
         self.y_source = y_source
         self.transforms = transforms
+        self.device = device
 
         self.x_paths = np.array(list(x_source.glob("*")))
         self.y_paths = np.array(list(y_source.glob("*")))
@@ -25,8 +27,8 @@ class ImageDataset(Dataset):
         return len(self.x_paths)
 
     def __getitem__(self, idx: int):
-        x_im = read_image(str(self.x_paths[idx])).to(torch.float32)
-        y_im = read_image(str(self.y_paths[idx])).to(torch.float32)
+        x_im = read_image(str(self.x_paths[idx])).to(torch.float32).to(self.device)
+        y_im = read_image(str(self.y_paths[idx])).to(torch.float32).to(self.device)
 
         if self.transforms is not None:
             for transform in self.transforms:
