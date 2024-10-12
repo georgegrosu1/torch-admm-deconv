@@ -1,6 +1,5 @@
 import torch
-from tqdm.auto import tqdm
-from pprint import pprint
+from tqdm import tqdm
 from typing import List
 from torch.utils.data import DataLoader
 
@@ -37,15 +36,16 @@ class NNTrainer:
             lr_scheduler: torch.optim.lr_scheduler.LRScheduler = None):
 
         self.train(model, train_dataloader, optimizer)
-        self.eval(model, eval_dataloader)
+        if eval_dataloader:
+            self.eval(model, eval_dataloader)
 
 
     def train(self, model: torch.nn.Module, train_dataloader: DataLoader, optimizer: torch.optim.Optimizer):
         self._init_stats()
         model.train(mode=True)
-
+        pbar = tqdm(enumerate(train_dataloader), total=len(train_dataloader))
         print('\n\n\n////////////////////////////////////// TRAINING //////////////////////////////////////')
-        for batch_idx, (inputs, labels) in tqdm(enumerate(train_dataloader), total=len(train_dataloader)):
+        for batch_idx, (inputs, labels) in pbar:
             optimizer.zero_grad()
             outputs = model(inputs)
             loss = self.loss(outputs, labels)
@@ -53,7 +53,7 @@ class NNTrainer:
             optimizer.step()
 
             self._update_performance_stats(loss, outputs, labels)
-            self._print_current_metrics()
+            self._print_current_metrics(pbar)
 
         self._print_epoch_metrics('train', len(train_dataloader))
 
@@ -66,11 +66,9 @@ class NNTrainer:
             self._metrics_stats[metric_func.m_name]['cumsum'] += metric_res
 
 
-    def _print_current_metrics(self):
-        metrics_msg = ''
-        for metric_stat in self._metrics_stats.keys():
-            metrics_msg += f'{metric_stat}: {self._metrics_stats[metric_stat]['curr']:.4f}; '
-        pprint(metrics_msg)
+    def _print_current_metrics(self, pbar: tqdm):
+        metrics_msg = {mkey: f'{self._metrics_stats[mkey]['curr']:.4f}' for mkey in self._metrics_stats}
+        pbar.set_postfix(metrics_msg)
 
 
     def _print_epoch_metrics(self, phase: str, epoch_steps: int):
@@ -78,7 +76,7 @@ class NNTrainer:
         for metric_stat in self._metrics_stats.keys():
             avg_v = self._metrics_stats[metric_stat]['cumsum'] / epoch_steps
             metrics_msg += f'{phase}_{metric_stat}: {avg_v:.4f}; '
-        pprint(metrics_msg)
+        print(metrics_msg)
 
 
     def eval(self, model: torch.nn.Module, eval_dataloader: DataLoader):
