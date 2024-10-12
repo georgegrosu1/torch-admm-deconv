@@ -87,10 +87,10 @@ def fft_admm_tv(xin: torch.Tensor,
         H_t = identity
     else:
         k_kern_t = kern.flip((2,3)).repeat((C,1,1,1))
-        padup = torch.ceil(torch.tensor(kern.size(2) - 1, device=xin.device) / 2)
-        paddown = torch.floor(torch.tensor(kern.size(2) - 1, device=xin.device) / 2)
-        padleft = torch.ceil(torch.tensor(kern.size(3) - 1, device=xin.device) / 2)
-        padright = torch.floor(torch.tensor(kern.size(3) - 1, device=xin.device) / 2)
+        padup = torch.ceil(torch.tensor(kern.size(2) - 1, dtype=xin.dtype, device=xin.device) / 2)
+        paddown = torch.floor(torch.tensor(kern.size(2) - 1, dtype=xin.dtype, device=xin.device) / 2)
+        padleft = torch.ceil(torch.tensor(kern.size(3) - 1, dtype=xin.dtype, device=xin.device) / 2)
+        padright = torch.floor(torch.tensor(kern.size(3) - 1, dtype=xin.dtype, device=xin.device) / 2)
 
         pad1 = (int(padup), int(paddown), int(padleft), int(padright))
         pad2 = (int(paddown), int(padup), int(padright), int(padleft))
