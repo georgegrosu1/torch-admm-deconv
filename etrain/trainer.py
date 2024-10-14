@@ -4,20 +4,21 @@ from typing import List
 from torch.utils.data import DataLoader
 
 from emetrics.metrics import Metric
+from etrain.saver import NNSaver
+from etrain.logger import MetricsLogger
 
 
 class NNTrainer:
     def __init__(self,
                  loss: Metric,
                  metrics: List[Metric],
-                 # saver,
-                 # logger
-                 ):
+                 saver: NNSaver,
+                 logger: MetricsLogger = None):
 
         self.loss = loss
         self.metrics = metrics
-        # self.saver = saver
-        # self.logger = logger
+        self.saver = saver
+        self.logger = logger
         self._init_stats()
 
 
@@ -31,13 +32,18 @@ class NNTrainer:
     def run(self,
             model: torch.nn.Module,
             optimizer: torch.optim.Optimizer,
+            epochs: int,
             train_dataloader: DataLoader,
             eval_dataloader: DataLoader = None,
             lr_scheduler: torch.optim.lr_scheduler.LRScheduler = None):
 
-        self.train(model, train_dataloader, optimizer)
-        if eval_dataloader:
-            self.eval(model, eval_dataloader)
+        for epoch in range(epochs):
+            self.train(model, train_dataloader, optimizer)
+            loss_val_steps = len(train_dataloader)
+            if eval_dataloader:
+                self.eval(model, eval_dataloader, lr_scheduler)
+                loss_val_steps = len(eval_dataloader)
+            self.on_epoch_end(epoch, model, optimizer, self.get_epoch_metrics(loss_val_steps)[self.loss.m_name])
 
 
     def train(self, model: torch.nn.Module, train_dataloader: DataLoader, optimizer: torch.optim.Optimizer):
@@ -56,6 +62,8 @@ class NNTrainer:
             self._print_current_metrics(pbar)
 
         self._print_epoch_metrics('train', len(train_dataloader))
+        self.logger(self.get_epoch_metrics(len(train_dataloader)), 'train')
+
 
     def _update_performance_stats(self, loss_res, outputs, labels):
         self._metrics_stats[self.loss.m_name]['curr'] = loss_res.item()
@@ -72,14 +80,24 @@ class NNTrainer:
 
 
     def _print_epoch_metrics(self, phase: str, epoch_steps: int):
-        metrics_msg = ''
-        for metric_stat in self._metrics_stats.keys():
-            avg_v = self._metrics_stats[metric_stat]['cumsum'] / epoch_steps
-            metrics_msg += f'{phase}_{metric_stat}: {avg_v:.4f}; '
+        metrics_msg = '\n'
+        for metric_stat, val in self.get_epoch_metrics(epoch_steps).items():
+            metrics_msg += f'{phase}_{metric_stat}: {val:.4f}; '
         print(metrics_msg)
 
 
-    def eval(self, model: torch.nn.Module, eval_dataloader: DataLoader):
+    def get_epoch_metrics(self, epoch_steps: int):
+        ep_metrics = {}
+        for metric_name in self._metrics_stats.keys():
+            avg_v = self._metrics_stats[metric_name]['cumsum'] / epoch_steps
+            ep_metrics[metric_name] = avg_v
+        return ep_metrics
+
+
+    def eval(self,
+             model: torch.nn.Module,
+             eval_dataloader: DataLoader,
+             lr_scheduler: torch.optim.lr_scheduler.LRScheduler = None):
         self._init_stats()
         model.eval()
 
@@ -87,11 +105,15 @@ class NNTrainer:
         with torch.no_grad():
             for batch_idx, (inputs, labels) in tqdm(enumerate(eval_dataloader), total=len(eval_dataloader)):
                 outputs = model(inputs)
-                loss = self.loss(outputs, labels)
-                self._update_performance_stats(loss, outputs, labels)
+                vloss = self.loss(outputs, labels)
+                if lr_scheduler is not None:
+                    lr_scheduler.step(vloss)
+                self._update_performance_stats(vloss, outputs, labels)
 
         self._print_epoch_metrics('eval', len(eval_dataloader))
+        self.logger(self.get_epoch_metrics(len(eval_dataloader)), 'eval')
 
 
-    def on_epoch_end(self):
-        pass
+    def on_epoch_end(self, epoch, model, optimizer, loss_val):
+        logs_dict = self.logger.get_logged(reformat=True) if self.logger is not None else None
+        self.saver.save_on_epoch_end(epoch, model, optimizer, loss_val, logs_dict)

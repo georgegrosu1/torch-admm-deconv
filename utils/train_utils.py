@@ -3,7 +3,7 @@ from pathlib import Path
 
 
 def get_abs_path(relative_path) -> Path:
-    root_path = Path(__file__).resolve().parent
+    root_path = Path(__file__).resolve().parent.parent
     return Path(str(root_path) + f'{relative_path}')
 
 
@@ -13,7 +13,7 @@ def get_saving_model_path(save_path: str, model_name: str, save_time: str = None
     else:
         save_dir = get_abs_path(save_path) / model_name
     save_dir.mkdir(parents=True, exist_ok=True)
-    model_name = model_name + '_epoch{epoch:02d}_vloss{val_loss:.2f}.hdf5'
+    model_name = model_name + '_epoch{epoch:02d}_vloss{val_loss:.4f}'
     return save_dir / model_name
 
 
