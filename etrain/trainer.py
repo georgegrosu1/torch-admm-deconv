@@ -50,8 +50,8 @@ class NNTrainer:
     def train(self, model: torch.nn.Module, train_dataloader: DataLoader, optimizer: torch.optim.Optimizer):
         self._init_stats()
         model.train(mode=True)
-        pbar = tqdm(enumerate(train_dataloader), total=len(train_dataloader))
         print('\n [ TRAINING ]')
+        pbar = tqdm(enumerate(train_dataloader), total=len(train_dataloader))
         for batch_idx, (inputs, labels) in pbar:
             optimizer.zero_grad()
             outputs = model(inputs)
