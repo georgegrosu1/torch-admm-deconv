@@ -38,6 +38,7 @@ class NNTrainer:
             lr_scheduler: torch.optim.lr_scheduler.LRScheduler = None):
 
         for epoch in range(epochs):
+            print(f'\n\n\n/////////////////////////////////// [ EPOCH: {epoch} ] ///////////////////////////////////')
             self.train(model, train_dataloader, optimizer)
             loss_val_steps = len(train_dataloader)
             if eval_dataloader:
@@ -50,7 +51,7 @@ class NNTrainer:
         self._init_stats()
         model.train(mode=True)
         pbar = tqdm(enumerate(train_dataloader), total=len(train_dataloader))
-        print('\n\n\n////////////////////////////////////// TRAINING //////////////////////////////////////')
+        print('\n [ TRAINING ]')
         for batch_idx, (inputs, labels) in pbar:
             optimizer.zero_grad()
             outputs = model(inputs)
@@ -101,7 +102,7 @@ class NNTrainer:
         self._init_stats()
         model.eval()
 
-        print('\n////////////////////////////////////// EVALUATING //////////////////////////////////////')
+        print('\n [ EVALUATING ]')
         with torch.no_grad():
             for batch_idx, (inputs, labels) in tqdm(enumerate(eval_dataloader), total=len(eval_dataloader)):
                 outputs = model(inputs)
