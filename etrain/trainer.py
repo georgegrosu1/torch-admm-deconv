@@ -1,6 +1,7 @@
 import torch
 from tqdm import tqdm
 from typing import List
+from prettytable import PrettyTable
 from torch.utils.data import DataLoader
 
 from emetrics.metrics import Metric
@@ -37,6 +38,7 @@ class NNTrainer:
             eval_dataloader: DataLoader = None,
             lr_scheduler: torch.optim.lr_scheduler.LRScheduler = None):
 
+        self.get_model_params(model)
         for epoch in range(epochs):
             print(f'\n\n\n/////////////////////////////////// [ EPOCH: {epoch} ] ///////////////////////////////////')
             self.train(model, train_dataloader, optimizer)
@@ -113,6 +115,21 @@ class NNTrainer:
 
         self._print_epoch_metrics('eval', len(eval_dataloader))
         self.logger(self.get_epoch_metrics(len(eval_dataloader)), 'eval')
+
+
+    @staticmethod
+    def get_model_params(model):
+        table = PrettyTable(["Modules", "Parameters"])
+        total_params = 0
+        for name, parameter in model.named_parameters():
+            if not parameter.requires_grad:
+                continue
+            params = parameter.numel()
+            table.add_row([name, params])
+            total_params += params
+        print(table)
+        print(f"Total Trainable Params: {total_params}")
+        return total_params
 
 
     def on_epoch_end(self, epoch, model, optimizer, loss_val):
