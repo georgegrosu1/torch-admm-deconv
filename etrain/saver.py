@@ -12,12 +12,12 @@ class SaveMode(Enum):
 
 
 class NNSaver:
-    def __init__(self ,model_name: str, save_mode: SaveMode = SaveMode.Best, use_time_date: bool = True):
-        self.save_dir = '/trained_models'
+    def __init__(self, save_dir: str, model_name: str, save_mode: SaveMode = SaveMode.Best, use_time_date: bool = True):
+        self.save_dir = save_dir
         self.model_name = model_name
         self.save_mode = save_mode
         save_time = None if not use_time_date else get_time_formated()
-        self.model_saving_path = get_saving_model_path(self.save_dir, model_name, save_time)
+        self.model_saving_path = get_saving_model_path(save_dir, model_name, save_time)
         self._losses = np.array([])
 
 
@@ -37,8 +37,8 @@ class NNSaver:
             self._losses = np.append(self._losses, vloss)
             self.save_model(epoch, model, optimizer, vloss)
         else:
-            smaller_losses = self._losses > vloss
-            if smaller_losses.sum() == self._losses.shape[0]:
+            greater_losses = self._losses > vloss
+            if greater_losses.sum() == self._losses.shape[0]:
                 self.save_model(epoch, model, optimizer, vloss)
 
 
