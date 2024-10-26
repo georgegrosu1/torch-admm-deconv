@@ -166,3 +166,9 @@ cython_debug/
 *.jpg
 *.jpeg
 *.tif
+
+# models
+*.tar
+*.hdf5
+*.hd5
+*.pb
