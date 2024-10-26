@@ -12,7 +12,7 @@ def compute_residual_dec_input_channels(enc_out_channels: List[int], dec_out_cha
 
 
 def compute_enc_input_channels(in_channels: int, enc_out_channels: List[int]) -> List[int]:
-    return [in_channels] + enc_out_channels
+    return [in_channels] + enc_out_channels[:-1]
 
 
 class AEModule(nn.Module):
@@ -21,24 +21,21 @@ class AEModule(nn.Module):
                  out_channels: List[int],
                  kernel_sizes: List[int | Tuple[int, int]],
                  activation: nn.Module = None,
-                 pool_size: int = None):
+                 pool_size: int = 0):
         super(AEModule, self).__init__()
 
         assert len(in_channels) == len(out_channels) == len(kernel_sizes), \
             'in_channels, out_channels, and kernel_sizes must have same lengths'
-        self.blocks = self._init_blocks(in_channels, out_channels, kernel_sizes, activation, pool_size)
+        self._init_blocks(in_channels, out_channels, kernel_sizes, activation, pool_size)
+
 
     def _init_blocks(self,
                      in_channels: List[int],
                      out_channels: List[int],
                      kernel_sizes: List[int | Tuple[int, int]],
                      activation: nn.Module = None,
-                     pool_size: int = None):
-
-        blocks = nn.ModuleList()
-        for i in range(len(out_channels)):
-            self.blocks.append(DownBlock(in_channels[i], out_channels[i], kernel_sizes[i], activation, pool_size))
-        return blocks
+                     pool_size: int = 0):
+        raise NotImplementedError
 
 
     def forward(self, x: torch.Tensor | List[torch.Tensor]) -> torch.Tensor:
@@ -55,8 +52,24 @@ class Encoder(AEModule):
         super(Encoder, self).__init__(in_channels, out_channels, kernel_sizes, activation, pool_size)
 
 
+    def _init_blocks(self,
+                     in_channels: List[int],
+                     out_channels: List[int],
+                     kernel_sizes: List[int | Tuple[int, int]],
+                     activation: nn.Module = None,
+                     pool_size: int = 0):
+        blocks = nn.ModuleList()
+        for i in range(len(out_channels)):
+            blocks.append(DownBlock(in_channels[i], out_channels[i], kernel_sizes[i], activation, pool_size))
+        self.blocks = blocks
+
+
     def forward(self, x: torch.Tensor) -> List[torch.Tensor]:
-        return [block(x) for block in self.blocks]
+        out = []
+        for block in self.blocks:
+            x = block(x)
+            out.append(x)
+        return out
 
 
 class Decoder(AEModule):
@@ -65,11 +78,24 @@ class Decoder(AEModule):
                  out_channels: List[int],
                  kernel_sizes: List[int | Tuple[int, int]],
                  activation: nn.Module = None,
-                 pool_size: int = None):
+                 pool_size: int = 0):
         super(Decoder, self).__init__(in_channels, out_channels, kernel_sizes, activation, pool_size)
 
 
+    def _init_blocks(self,
+                     in_channels: List[int],
+                     out_channels: List[int],
+                     kernel_sizes: List[int | Tuple[int, int]],
+                     activation: nn.Module = None,
+                     pool_size: int = 0):
+        blocks = nn.ModuleList()
+        for i in range(len(out_channels)):
+            blocks.append(UpBlock(in_channels[i], out_channels[i], kernel_sizes[i], activation, pool_size))
+        self.blocks = blocks
+
+
     def forward(self, x: List[torch.Tensor]) -> torch.Tensor:
+        x.reverse()
         out = self.blocks[0](x[0])
         for i in range(1, len(x)):
             out = self.blocks[i](torch.cat([x[i], out], dim=1))
@@ -83,7 +109,7 @@ class Autoencoder(nn.Module):
                  dec_out_channels: List[int],
                  kernel_sizes: List[int | Tuple[int, int]],
                  activation: nn.Module = None,
-                 pool_size: int = None):
+                 pool_size: int = 0):
         super(Autoencoder, self).__init__()
         # Solve Encoder
         enc_in_channels = compute_enc_input_channels(in_channels, enc_out_channels)

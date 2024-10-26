@@ -28,13 +28,13 @@ class DownBlock(nn.Module):
                  out_channels: int,
                  kernel_size: int | Tuple[int, int],
                  activation: nn.Module = None,
-                 pool_size: int = None):
+                 pool_size: int = 0):
         super(DownBlock, self).__init__()
         self.down_conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
-                                   stride=1, padding=pool_size-1, padding_mode='zeros')
+                                   stride=1, padding=max(0, pool_size-1), padding_mode='zeros')
         self.normalization = nn.BatchNorm2d(num_features=out_channels)
         self.activation = activation
-        self.max_pool = nn.MaxPool2d(kernel_size=pool_size, stride=1) if pool_size is not None else None
+        self.max_pool = nn.MaxPool2d(kernel_size=pool_size, stride=1) if pool_size != 0 else None
 
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -51,13 +51,13 @@ class UpBlock(nn.Module):
                  out_channels: int,
                  kernel_size: int | Tuple[int, int],
                  activation: nn.Module = None,
-                 pool_size: int = None):
+                 pool_size: int = 0):
         super(UpBlock, self).__init__()
 
         self.up_conv = nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
-                                          stride=1, padding=pool_size, padding_mode='circular')
+                                          stride=1, padding=pool_size, padding_mode='zeros')
         self.normalization = nn.BatchNorm2d(num_features=out_channels)
-        self.max_pool = nn.MaxPool2d(kernel_size=pool_size, stride=1) if pool_size is not None else None
+        self.max_pool = nn.MaxPool2d(kernel_size=pool_size, stride=1) if pool_size != 0 else None
         self.activation = activation
 
 

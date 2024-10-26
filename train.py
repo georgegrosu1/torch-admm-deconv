@@ -10,6 +10,7 @@ import numpy as np
 
 from eprocessing.dataload import ImageDataset
 from elayers.admmdeconv import ADMMDeconv
+from modelbuild.autoencoder import Autoencoder
 from eprocessing.etransforms import Scale, RandCrop
 from etrain.trainer import NNTrainer
 from etrain.logger import MetricsLogger
@@ -44,7 +45,13 @@ def init_training(config_file, save_dir, model_name, device):
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
 
-    model = ADMMDeconv((), max_iters=100, iso=True).to(device)
+    # model = ADMMDeconv((), max_iters=100, iso=True).to(device)
+    model = Autoencoder(3,
+                        [4, 4, 4, 4],
+                        [4, 5, 3, 3],
+                        [3,4,5,3],
+                        torch.nn.ReLU())
+    model = model.to(device)
     opt = torch.optim.Adam(model.parameters(), train_cfg['lr'])
 
     eval_metrics = [MSSSIMMetric(device), PSNRMetric(device), SCCMetric(device)]
