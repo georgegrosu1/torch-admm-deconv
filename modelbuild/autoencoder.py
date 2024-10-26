@@ -48,7 +48,7 @@ class Encoder(AEModule):
                  out_channels: List[int],
                  kernel_sizes: List[int | Tuple[int, int]],
                  activation: nn.Module = None,
-                 pool_size: int = None):
+                 pool_size: int = 0):
         super(Encoder, self).__init__(in_channels, out_channels, kernel_sizes, activation, pool_size)
 
 

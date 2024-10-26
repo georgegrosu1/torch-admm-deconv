@@ -47,10 +47,11 @@ def init_training(config_file, save_dir, model_name, device):
 
     # model = ADMMDeconv((), max_iters=100, iso=True).to(device)
     model = Autoencoder(3,
-                        [4, 4, 4, 4],
-                        [4, 5, 3, 3],
-                        [3,4,5,3],
-                        torch.nn.ReLU())
+                        [16, 32, 32, 64, 64],
+                        [64, 64, 32, 32, 3],
+                        [11, 11, 15, 15, 18],
+                        activation=torch.nn.ReLU(),
+                        pool_size=3)
     model = model.to(device)
     opt = torch.optim.Adam(model.parameters(), train_cfg['lr'])
 

@@ -55,7 +55,7 @@ class UpBlock(nn.Module):
         super(UpBlock, self).__init__()
 
         self.up_conv = nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
-                                          stride=1, padding=pool_size, padding_mode='zeros')
+                                          stride=1)
         self.normalization = nn.BatchNorm2d(num_features=out_channels)
         self.max_pool = nn.MaxPool2d(kernel_size=pool_size, stride=1) if pool_size != 0 else None
         self.activation = activation
