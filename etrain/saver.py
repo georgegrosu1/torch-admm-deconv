@@ -26,6 +26,8 @@ class NNSaver:
             self.save_model(epoch, model, optimizer, vloss)
         elif self.save_mode == SaveMode.Best:
             self.save_if_best(epoch, model, optimizer, vloss)
+        else:
+            raise NotImplementedError
 
         if log_metrics:
             csv_path = self.model_saving_path.parent / 'logged_metrics.csv'
@@ -33,13 +35,13 @@ class NNSaver:
 
 
     def save_if_best(self, epoch: int, model: torch.nn.Module , optimizer, vloss: float):
-        if not self._losses:
-            self._losses = np.append(self._losses, vloss)
+        if self._losses.size == 0:
             self.save_model(epoch, model, optimizer, vloss)
         else:
             greater_losses = self._losses > vloss
             if greater_losses.sum() == self._losses.shape[0]:
                 self.save_model(epoch, model, optimizer, vloss)
+        self._losses = np.append(self._losses, vloss)
 
 
     def save_model(self, epoch: int, model: torch.nn.Module , optimizer, vloss: float):
