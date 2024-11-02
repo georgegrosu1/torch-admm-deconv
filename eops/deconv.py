@@ -13,7 +13,7 @@ def hard_thresh(x: torch.Tensor, tau: float) -> torch.Tensor:
 
 
 def soft_thresh(x: torch.Tensor, tau: float) -> torch.Tensor:
-    return torch.sign(x) * torch.maximum(torch.abs(x)-tau, torch.tensor([0]))
+    return torch.sign(x) * torch.maximum(torch.abs(x)-tau, torch.tensor([0], dtype=x.dtype, device=x.device))
 
 
 def block_thresh(x: torch.Tensor, tau: torch.Tensor) -> torch.Tensor:
