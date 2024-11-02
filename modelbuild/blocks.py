@@ -1,17 +1,27 @@
 import torch
 import torch.nn as nn
-from typing import Tuple
+from typing import Tuple, List
+
+
+def compute_residual_dec_input_channels(enc_out_channels: List[int], dec_out_channels: List[int]) -> List[int]:
+    enc_out_channels_rev = enc_out_channels[::-1]
+    return [enc_out_channels_rev[0]] + [enc_out + dec_out for enc_out, dec_out in zip(enc_out_channels_rev[1:],
+                                                                              dec_out_channels[:-1])]
+
+
+def compute_enc_input_channels(in_channels: int, enc_out_channels: List[int]) -> List[int]:
+    return [in_channels] + enc_out_channels[:-1]
 
 
 class UpDownBock(nn.Module):
     def __init__(self,
-                 kernel_size: int | Tuple[int, int],
                  up_in_ch: int, up_out_ch: int,
-                 down_in_ch: int, down_out_ch: int,
+                 down_out_ch: int,
+                 kernel_size: int | Tuple[int, int],
                  activation: nn.Module = None):
         super(UpDownBock, self).__init__()
         self.up_block = UpBlock(up_in_ch, up_out_ch, kernel_size, activation)
-        self.down_block = DownBlock(down_in_ch, down_out_ch, kernel_size, activation)
+        self.down_block = DownBlock(up_out_ch, down_out_ch, kernel_size, activation)
         self.activation = activation
 
 

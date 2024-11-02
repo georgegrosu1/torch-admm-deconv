@@ -1,8 +1,20 @@
 import cv2
+import uuid
 import numpy as np
 
 from typing import Tuple, List
 from pathlib import Path
+
+
+def get_im_hash(img: np.ndarray) -> str:
+    imgg = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    h=cv2.img_hash.pHash(imgg)
+    ph=hex(int.from_bytes(h.tobytes(), byteorder='big', signed=False))
+    return str(ph)
+
+
+def get_rand_uuid() -> str:
+    return str(uuid.uuid4())
 
 
 def add_blur_gaussian(img, k_shape=(17, 17), std=2.4):

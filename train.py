@@ -9,8 +9,7 @@ import torch
 import numpy as np
 
 from eprocessing.dataload import ImageDataset
-from elayers.admmdeconv import ADMMDeconv
-from modelbuild.autoencoder import Autoencoder
+from modelbuild.restorer import Restorer
 from eprocessing.etransforms import Scale, RandCrop
 from etrain.trainer import NNTrainer
 from etrain.logger import MetricsLogger
@@ -45,13 +44,22 @@ def init_training(config_file, save_dir, model_name, device):
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
 
-    # model = ADMMDeconv((), max_iters=100, iso=True).to(device)
-    model = Autoencoder(3,
-                        [16, 32, 32, 64, 64],
-                        [64, 64, 32, 32, 3],
-                        [11, 11, 15, 15, 18],
-                        activation=torch.nn.ReLU(),
-                        pool_size=3)
+    autoenc_args = {'in_channels': 3,
+                    'enc_out_channels': [16, 32, 32, 64],
+                    'dec_out_channels': [32, 32, 64, 64],
+                    'kernel_sizes': [5, 11, 11, 15],
+                    'activation': torch.nn.ReLU(),
+                    'pool_size': 3}
+    updowns_args = {'in_channels': 3,
+                    'out_channels': [16, 32, 32, 64],
+                    'kernel_sizes': [3, 5, 5, 7],
+                    'activation': torch.nn.ReLU()}
+    deconv_args_list = [
+        {'kern_size': (5,5),
+        'max_iters': 100,
+        'iso': True}
+    ]
+    model = Restorer(autoenc_args, updowns_args, deconv_args_list)
     model = model.to(device)
     opt = torch.optim.Adam(model.parameters(), train_cfg['lr'])
 

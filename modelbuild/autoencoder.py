@@ -1,18 +1,6 @@
-import torch
-import torch.nn as nn
 from typing import List
 
 from modelbuild.blocks import *
-
-
-def compute_residual_dec_input_channels(enc_out_channels: List[int], dec_out_channels: List[int]) -> List[int]:
-    enc_out_channels_rev = list(reversed(enc_out_channels))
-    return [enc_out_channels_rev[0]] + [enc_out + dec_out for enc_out, dec_out in zip(enc_out_channels_rev[1:],
-                                                                              dec_out_channels[:-1])]
-
-
-def compute_enc_input_channels(in_channels: int, enc_out_channels: List[int]) -> List[int]:
-    return [in_channels] + enc_out_channels[:-1]
 
 
 class AEModule(nn.Module):
@@ -115,7 +103,7 @@ class Autoencoder(nn.Module):
         enc_in_channels = compute_enc_input_channels(in_channels, enc_out_channels)
         self.encoder = Encoder(enc_in_channels, enc_out_channels, kernel_sizes, activation, pool_size)
         # Solve decoder
-        dec_kernel_sizes = list(reversed(kernel_sizes))
+        dec_kernel_sizes = kernel_sizes[::-1]
         dec_in_channels = compute_residual_dec_input_channels(enc_out_channels, dec_out_channels)
         self.decoder = Decoder(dec_in_channels, dec_out_channels, dec_kernel_sizes, activation, pool_size)
 
