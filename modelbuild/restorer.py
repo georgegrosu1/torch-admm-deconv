@@ -7,6 +7,7 @@ from modelbuild.updownscale import UpDownScale
 
 class Restorer(nn.Module):
     def __init__(self,
+                 inc_channels: int,
                  autoencoder_args: Dict,
                  updownscale_args: Dict,
                  deconvs_args: List[Dict]):
@@ -17,7 +18,7 @@ class Restorer(nn.Module):
         self.deconvs = Deconvs(deconvs_args)
 
         last_block_in_ch = (autoencoder_args['dec_out_channels'][-1] + updownscale_args['out_channels'][-1] +
-                            len(deconvs_args) * autoencoder_args['in_channels'])
+                            len(deconvs_args) * inc_channels)
         last_block_out_ch = autoencoder_args['in_channels']
         self.out_block = UpDownBock(last_block_in_ch, last_block_in_ch//2, last_block_out_ch, 7, nn.ReLU6())
 

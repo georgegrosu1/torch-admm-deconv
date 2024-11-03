@@ -47,12 +47,12 @@ def init_training(config_file, save_dir, model_name, device):
     autoenc_args = {'in_channels': 12,
                     'enc_out_channels': [16, 32, 32, 64, 128],
                     'dec_out_channels': [32, 32, 64, 64, 128],
-                    'kernel_sizes': [5, 11, 11, 15],
+                    'kernel_sizes': [5, 11, 11, 11, 15],
                     'activation': torch.nn.GELU(),
                     'pool_size': 5}
     updowns_args = {'in_channels': 12,
-                    'out_channels': [16, 32, 32, 64, 128],
-                    'kernel_sizes': [5, 7, 7, 11, 15],
+                    'out_channels': [16, 32, 32, 64, 64, 128],
+                    'kernel_sizes': [5, 7, 7, 11, 11, 15],
                     'activation': torch.nn.GELU()}
     deconv_args_list = [
         {'kern_size': (),
