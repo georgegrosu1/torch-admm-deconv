@@ -15,11 +15,13 @@ class Restorer(nn.Module):
         self.autoencoder = Autoencoder(**autoencoder_args)
         self.updownscale = UpDownScale(**updownscale_args)
         self.deconvs = Deconvs(deconvs_args)
+
         last_block_in_ch = (autoencoder_args['dec_out_channels'][-1] + updownscale_args['out_channels'][-1] +
                             len(deconvs_args) * autoencoder_args['in_channels'])
         last_block_out_ch = autoencoder_args['in_channels']
         self.out_block = UpDownBock(last_block_in_ch, last_block_in_ch//2, last_block_out_ch, 7, nn.ReLU6())
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        comb = torch.cat([self.autoencoder(x), self.deconvs(x), self.updownscale(x)], dim=1)
+        deconv_out = self.deconvs(x)
+        comb = torch.cat([self.autoencoder(deconv_out), deconv_out, self.updownscale(deconv_out)], dim=1)
         return self.out_block(comb)

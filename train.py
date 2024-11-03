@@ -44,20 +44,36 @@ def init_training(config_file, save_dir, model_name, device):
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
 
-    autoenc_args = {'in_channels': 3,
-                    'enc_out_channels': [16, 32, 32, 64],
-                    'dec_out_channels': [32, 32, 64, 64],
+    autoenc_args = {'in_channels': 12,
+                    'enc_out_channels': [16, 32, 32, 64, 128],
+                    'dec_out_channels': [32, 32, 64, 64, 128],
                     'kernel_sizes': [5, 11, 11, 15],
-                    'activation': torch.nn.ReLU(),
-                    'pool_size': 3}
-    updowns_args = {'in_channels': 3,
-                    'out_channels': [16, 32, 32, 64],
-                    'kernel_sizes': [3, 5, 5, 7],
-                    'activation': torch.nn.ReLU()}
+                    'activation': torch.nn.GELU(),
+                    'pool_size': 5}
+    updowns_args = {'in_channels': 12,
+                    'out_channels': [16, 32, 32, 64, 128],
+                    'kernel_sizes': [5, 7, 7, 11, 15],
+                    'activation': torch.nn.GELU()}
     deconv_args_list = [
-        {'kern_size': (5,5),
-        'max_iters': 100,
-        'iso': True}
+        {'kern_size': (),
+        'max_iters': 80,
+         'rho': 0.02,
+        'iso': True},
+        {'kern_size': (7, 7),
+         'max_iters': 80,
+         'lmbda': 0.004,
+         'rho': 0.02,
+         'iso': False},
+        {'kern_size': (7, 7),
+         'max_iters': 80,
+         'lmbda': 0.04,
+         'rho': 0.04,
+         'iso': True},
+        {'kern_size': (7, 7),
+         'max_iters': 80,
+         'lmbda': 0.4,
+         'rho': 0.07,
+         'iso': False},
     ]
     model = Restorer(autoenc_args, updowns_args, deconv_args_list)
     model = model.to(device)
