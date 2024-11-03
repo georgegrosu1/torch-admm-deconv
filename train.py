@@ -75,7 +75,7 @@ def init_training(config_file, save_dir, model_name, device):
          'rho': 0.07,
          'iso': False},
     ]
-    model = Restorer(autoenc_args, updowns_args, deconv_args_list)
+    model = Restorer(3, autoenc_args, updowns_args, deconv_args_list)
     model = model.to(device)
     opt = torch.optim.Adam(model.parameters(), train_cfg['lr'])
 

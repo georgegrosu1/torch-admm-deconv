@@ -19,7 +19,7 @@ class Restorer(nn.Module):
 
         last_block_in_ch = (autoencoder_args['dec_out_channels'][-1] + updownscale_args['out_channels'][-1] +
                             len(deconvs_args) * inc_channels)
-        last_block_out_ch = autoencoder_args['in_channels']
+        last_block_out_ch = inc_channels
         self.out_block = UpDownBock(last_block_in_ch, last_block_in_ch//2, last_block_out_ch, 7, nn.ReLU6())
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
