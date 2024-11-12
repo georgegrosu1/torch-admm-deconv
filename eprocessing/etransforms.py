@@ -1,5 +1,6 @@
 import torch
 from torchvision.transforms.functional import crop
+from typing import Tuple
 
 class RandCrop(object):
     def __init__(self, im_shape):
@@ -28,3 +29,25 @@ class RandCrop(object):
 class Scale(object):
     def __call__(self, x_img, y_img):
         return x_img / 255, y_img / 255
+
+
+class AddAWGN(object):
+    def __init__(self,
+                 mean: float = 0.0,
+                 std_range: Tuple[int, int] = (1, 1),
+                 minval: float = 0.0,
+                 maxval: float = 1.0,
+                 both: bool = False):
+        self.mean = mean
+        self.std_range = std_range
+        self.minval = minval
+        self.maxval = maxval
+        self.both = both
+
+
+    def __call__(self, x_img, y_img):
+        std = torch.randint(self.std_range[0], self.std_range[1], (1,)).item() / 255.0
+        awgn = torch.clamp(torch.randn(x_img.shape).to(x_img.device) * std + self.mean, self.minval, self.maxval)
+        if self.both:
+            return torch.clamp(x_img + awgn, 0.0, 1.0), torch.clamp(y_img + awgn, self.minval, self.maxval)
+        return torch.clamp(x_img + awgn, self.minval, self.maxval)
