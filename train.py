@@ -34,49 +34,40 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     # Prepare train & eval data loaders
     im_shape = tuple(train_cfg['im_shape'])
     transforms = [RandCrop(im_shape), Scale()]
-    if max_std > 0: transforms += [AddAWGN(std_range=(min_std, max_std))]
+    if max_std > 0: transforms += [AddAWGN(std_range=(min_std, max_std), both=True)]
     train_dset = ImageDataset(Path(train_cfg['train']['x_path']), Path(train_cfg['train']['y_path']), device=device,
                               transforms=transforms)
     eval_dset = ImageDataset(Path(train_cfg['eval']['x_path']), Path(train_cfg['eval']['y_path']), device=device,
                              transforms=transforms)
-    train_loader = torch.utils.data.DataLoader(train_dset, shuffle=True, batch_size=train_cfg['batch_size'],
-                                               num_workers=4)
-    eval_loader = torch.utils.data.DataLoader(eval_dset, shuffle=True, batch_size=train_cfg['batch_size'],
-                                              num_workers=4)
+    train_loader = torch.utils.data.DataLoader(train_dset, shuffle=True, batch_size=train_cfg['batch_size'])
+    eval_loader = torch.utils.data.DataLoader(eval_dset, shuffle=True, batch_size=train_cfg['batch_size'])
 
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
 
-    autoenc_args = {'in_channels': 12,
-                    'enc_out_channels': [16, 32, 32, 64, 128],
-                    'dec_out_channels': [32, 32, 64, 64, 128],
-                    'kernel_sizes': [5, 11, 11, 11, 15],
+    autoenc_args = {'in_channels': 9,
+                    'enc_out_channels': [16, 32, 32],
+                    'dec_out_channels': [32, 32, 64],
+                    'kernel_sizes': [5, 11, 11],
                     'activation': torch.nn.ReLU6(),
                     'pool_size': 5}
-    updowns_args = {'in_channels': 12,
-                    'out_channels': [16, 32, 32, 64, 64, 128],
-                    'kernel_sizes': [5, 7, 7, 11, 11, 15],
+    updowns_args = {'in_channels': 9,
+                    'out_channels': [16, 32, 32, 64],
+                    'kernel_sizes': [5, 7, 7, 11],
                     'activation': torch.nn.ReLU6()}
     deconv_args_list = [
         {'kern_size': (),
         'max_iters': 80,
-         'rho': 0.02,
+         'rho': 0.2,
         'iso': True},
-        {'kern_size': (7, 7),
+        {'kern_size': (),
          'max_iters': 80,
-         'lmbda': 0.004,
          'rho': 0.02,
          'iso': False},
-        {'kern_size': (7, 7),
+        {'kern_size': (),
          'max_iters': 80,
-         'lmbda': 0.04,
-         'rho': 0.04,
+         'rho': 0.004,
          'iso': True},
-        {'kern_size': (7, 7),
-         'max_iters': 80,
-         'lmbda': 0.4,
-         'rho': 0.07,
-         'iso': False},
     ]
     model = Restorer(3, autoenc_args, updowns_args, deconv_args_list)
     model = model.to(device)
