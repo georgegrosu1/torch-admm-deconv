@@ -50,4 +50,4 @@ class AddAWGN(object):
         awgn = torch.clamp(torch.randn(x_img.shape).to(x_img.device) * std + self.mean, self.minval, self.maxval)
         if self.both:
             return torch.clamp(x_img + awgn, 0.0, 1.0), torch.clamp(y_img + awgn, self.minval, self.maxval)
-        return torch.clamp(x_img + awgn, self.minval, self.maxval)
+        return torch.clamp(x_img + awgn, self.minval, self.maxval), y_img

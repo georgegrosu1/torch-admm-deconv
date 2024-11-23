@@ -34,7 +34,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     # Prepare train & eval data loaders
     im_shape = tuple(train_cfg['im_shape'])
     transforms = [RandCrop(im_shape), Scale()]
-    if max_std > 0: transforms += [AddAWGN(std_range=(min_std, max_std), both=True)]
+    if max_std > 0: transforms += [AddAWGN(std_range=(min_std, max_std), both=False)]
     train_dset = ImageDataset(Path(train_cfg['train']['x_path']), Path(train_cfg['train']['y_path']), device=device,
                               transforms=transforms)
     eval_dset = ImageDataset(Path(train_cfg['eval']['x_path']), Path(train_cfg['eval']['y_path']), device=device,
