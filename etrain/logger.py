@@ -26,7 +26,7 @@ class MetricsLogger:
         for metric_k in self.metrics['train']:
             self._step_metrics[metric_k] = []
 
-        if 'psnr' in self.metrics['train'].keys():
+        if 'psnr' in self.metrics['train'].keys() and 'mse' not in self._step_metrics.keys():
             self._init_for_psnr()
 
     def _init_for_psnr(self):
@@ -49,10 +49,10 @@ class MetricsLogger:
             return psnr_compute(np.mean(self._step_metrics['mse']))
         return np.mean(self._step_metrics[metric_name])
 
-    def get_avg_metrics(self):
-        avg_metrics = {}
+    def get_avg_metrics(self, phase: str):
         for metric_name in self._step_metrics:
-            avg_metrics[metric_name] = self.get_avg_metric_val(metric_name)
+            self.metrics[phase][metric_name] = self.get_avg_metric_val(metric_name)
+        return self.metrics[phase]
 
     def get_logged(self, reformat: bool = True) -> dict:
         if reformat:

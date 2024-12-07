@@ -23,7 +23,7 @@ class NNTrainer:
 
     def _init_metrics(self, metrics: list[Metric]):
         metrics_names = [metric.m_name for metric in metrics]
-        if 'psnr' in metrics_names:
+        if 'psnr' in metrics_names and 'mse' not in metrics_names:
             self.metrics = metrics + [MSE(metrics[0].device)]
         else:
             self.metrics = metrics
@@ -43,7 +43,7 @@ class NNTrainer:
             self.train(model, train_dataloader, optimizer)
             if eval_dataloader:
                 self.eval(model, eval_dataloader, lr_scheduler)
-            self.on_epoch_end(epoch, model, optimizer, self.get_epoch_metrics()[self.loss.m_name])
+            self.on_epoch_end(epoch, model, optimizer, self.get_epoch_metrics('eval')[self.loss.m_name])
 
 
     def train(self, model: torch.nn.Module, train_dataloader: DataLoader, optimizer: torch.optim.Optimizer):
@@ -62,7 +62,7 @@ class NNTrainer:
             self._print_current_metrics(pbar)
 
         self._print_epoch_metrics('train')
-        self.logger(self.get_epoch_metrics(), 'train')
+        self.logger(self.get_epoch_metrics('train'), 'train')
 
 
     def _update_performance_stats(self, loss_res, outputs, labels):
@@ -79,13 +79,13 @@ class NNTrainer:
 
     def _print_epoch_metrics(self, phase: str):
         metrics_msg = '\n'
-        for metric_stat, val in self.get_epoch_metrics().items():
+        for metric_stat, val in self.get_epoch_metrics(phase).items():
             metrics_msg += f'{phase}_{metric_stat}: {val:.4f}; '
         print(metrics_msg)
 
 
-    def get_epoch_metrics(self):
-        return self.logger.get_avg_metrics()
+    def get_epoch_metrics(self, phase: str):
+        return self.logger.get_avg_metrics(phase)
 
 
     def eval(self,
