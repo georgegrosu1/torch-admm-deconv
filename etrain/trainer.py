@@ -1,10 +1,9 @@
 import torch
 from tqdm import tqdm
-from typing import List
 from prettytable import PrettyTable
 from torch.utils.data import DataLoader
 
-from emetrics.metrics import Metric
+from emetrics.metrics import Metric, MSE
 from etrain.saver import NNSaver
 from etrain.logger import MetricsLogger
 
@@ -12,22 +11,22 @@ from etrain.logger import MetricsLogger
 class NNTrainer:
     def __init__(self,
                  loss: Metric,
-                 metrics: List[Metric],
+                 metrics: list[Metric],
                  saver: NNSaver,
                  logger: MetricsLogger = None):
 
         self.loss = loss
-        self.metrics = metrics
         self.saver = saver
         self.logger = logger
-        self._init_stats()
+        self._init_metrics(metrics)
 
 
-    def _init_stats(self):
-        self._metrics_stats = {self.loss.m_name: {'curr': 0.0, 'cumsum': 0.0}}
-        if self.metrics:
-            for metric_k in self.metrics:
-                self._metrics_stats[metric_k.m_name] = {'curr': 0.0, 'cumsum': 0.0}
+    def _init_metrics(self, metrics: list[Metric]):
+        metrics_names = [metric.m_name for metric in metrics]
+        if 'psnr' in metrics_names:
+            self.metrics = metrics + [MSE(metrics[0].device)]
+        else:
+            self.metrics = metrics
 
 
     def run(self,
@@ -42,15 +41,13 @@ class NNTrainer:
         for epoch in range(epochs):
             print(f'\n\n\n/////////////////////////////////// [ EPOCH: {epoch} ] ///////////////////////////////////')
             self.train(model, train_dataloader, optimizer)
-            loss_val_steps = len(train_dataloader)
             if eval_dataloader:
                 self.eval(model, eval_dataloader, lr_scheduler)
-                loss_val_steps = len(eval_dataloader)
-            self.on_epoch_end(epoch, model, optimizer, self.get_epoch_metrics(loss_val_steps)[self.loss.m_name])
+            self.on_epoch_end(epoch, model, optimizer, self.get_epoch_metrics()[self.loss.m_name])
 
 
     def train(self, model: torch.nn.Module, train_dataloader: DataLoader, optimizer: torch.optim.Optimizer):
-        self._init_stats()
+        self.logger.reinit_step_stats()
         model.train(mode=True)
         print('\n [ TRAINING ]')
         pbar = tqdm(enumerate(train_dataloader), total=len(train_dataloader))
@@ -64,44 +61,38 @@ class NNTrainer:
             self._update_performance_stats(loss, outputs, labels)
             self._print_current_metrics(pbar)
 
-        self._print_epoch_metrics('train', len(train_dataloader))
-        self.logger(self.get_epoch_metrics(len(train_dataloader)), 'train')
+        self._print_epoch_metrics('train')
+        self.logger(self.get_epoch_metrics(), 'train')
 
 
     def _update_performance_stats(self, loss_res, outputs, labels):
-        self._metrics_stats[self.loss.m_name]['curr'] = loss_res.item()
-        self._metrics_stats[self.loss.m_name]['cumsum'] += loss_res.item()
+        self.logger.update_step_metric_val(self.loss.m_name, loss_res.item())
         for metric_func in self.metrics:
             metric_res = metric_func(outputs, labels).item()
-            self._metrics_stats[metric_func.m_name]['curr'] = metric_res
-            self._metrics_stats[metric_func.m_name]['cumsum'] += metric_res
+            self.logger.update_step_metric_val(metric_func.m_name, metric_res)
 
 
     def _print_current_metrics(self, pbar: tqdm):
-        metrics_msg = {mkey: f'{self._metrics_stats[mkey]['curr']:.4f}' for mkey in self._metrics_stats}
+        metrics_msg = self.logger.get_curr_step_metrics()
         pbar.set_postfix(metrics_msg)
 
 
-    def _print_epoch_metrics(self, phase: str, epoch_steps: int):
+    def _print_epoch_metrics(self, phase: str):
         metrics_msg = '\n'
-        for metric_stat, val in self.get_epoch_metrics(epoch_steps).items():
+        for metric_stat, val in self.get_epoch_metrics().items():
             metrics_msg += f'{phase}_{metric_stat}: {val:.4f}; '
         print(metrics_msg)
 
 
-    def get_epoch_metrics(self, epoch_steps: int):
-        ep_metrics = {}
-        for metric_name in self._metrics_stats.keys():
-            avg_v = self._metrics_stats[metric_name]['cumsum'] / epoch_steps
-            ep_metrics[metric_name] = avg_v
-        return ep_metrics
+    def get_epoch_metrics(self):
+        return self.logger.get_avg_metrics()
 
 
     def eval(self,
              model: torch.nn.Module,
              eval_dataloader: DataLoader,
              lr_scheduler: torch.optim.lr_scheduler.LRScheduler = None):
-        self._init_stats()
+        self.logger.reinit_step_stats()
         model.eval()
 
         print('\n [ EVALUATING ]')
@@ -113,8 +104,8 @@ class NNTrainer:
                     lr_scheduler.step(vloss)
                 self._update_performance_stats(vloss, outputs, labels)
 
-        self._print_epoch_metrics('eval', len(eval_dataloader))
-        self.logger(self.get_epoch_metrics(len(eval_dataloader)), 'eval')
+        self._print_epoch_metrics('eval')
+        self.logger(self.get_epoch_metrics(), 'eval')
 
 
     @staticmethod
