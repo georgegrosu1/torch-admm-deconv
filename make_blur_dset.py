@@ -77,9 +77,9 @@ def main():
     args_parser.add_argument('--dset', '-d', type=str, help='Dataset',
                              default=r'gopro')
     args_parser.add_argument('--orig', '-o', type=str, help='Path to RealBlur dir',
-                             default=r'D:/Projects/datasets/GoPro/GOPRO_Large')
+                             default=r'D:/Projects/datasets/RealBlur')
     args_parser.add_argument('--save_dir', '-s', type=str, help='Dir (relative to cwd) to save images',
-                             default=r'D:/Projects/datasets/GoPro/GOPRO_Large/orig_blur')
+                             default=r'D:/Projects/datasets/RealBlur/orig_blur')
     args_parser.add_argument('--min_noise_std', '-m', type=int, help='Minimum std of noise level',
                              default=15)
     args_parser.add_argument('--max_noise_std', '-M', type=int, help='Maximum std of noise level',

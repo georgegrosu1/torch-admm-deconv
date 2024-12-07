@@ -9,7 +9,11 @@ import torch
 import numpy as np
 
 from eprocessing.dataload import ImageDataset
+
 from modelbuild.restorer import Restorer
+from modelbuild.updownscale import UpDownScale
+from modelbuild.denoiser import Denoiser
+
 from eprocessing.etransforms import Scale, RandCrop, AddAWGN
 from etrain.trainer import NNTrainer
 from etrain.logger import MetricsLogger
@@ -45,31 +49,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
 
-    autoenc_args = {'in_channels': 9,
-                    'enc_out_channels': [16, 32, 32],
-                    'dec_out_channels': [32, 32, 64],
-                    'kernel_sizes': [5, 11, 11],
-                    'activation': torch.nn.ReLU6(),
-                    'pool_size': 5}
-    updowns_args = {'in_channels': 9,
-                    'out_channels': [16, 32, 32, 64],
-                    'kernel_sizes': [5, 7, 7, 11],
-                    'activation': torch.nn.ReLU6()}
-    deconv_args_list = [
-        {'kern_size': (),
-        'max_iters': 80,
-         'rho': 0.2,
-        'iso': True},
-        {'kern_size': (),
-         'max_iters': 80,
-         'rho': 0.02,
-         'iso': False},
-        {'kern_size': (),
-         'max_iters': 80,
-         'rho': 0.004,
-         'iso': True},
-    ]
-    model = Restorer(3, autoenc_args, updowns_args, deconv_args_list)
+    model = Denoiser()
     model = model.to(device)
     opt = torch.optim.Adam(model.parameters(), train_cfg['lr'])
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=0.93)
