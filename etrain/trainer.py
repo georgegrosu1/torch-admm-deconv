@@ -61,8 +61,8 @@ class NNTrainer:
             self._update_performance_stats(loss, outputs, labels)
             self._print_current_metrics(pbar)
 
+        self.logger('train')
         self._print_epoch_metrics('train')
-        self.logger(self.get_epoch_metrics('train'), 'train')
 
 
     def _update_performance_stats(self, loss_res, outputs, labels):
@@ -104,8 +104,8 @@ class NNTrainer:
                     lr_scheduler.step(vloss)
                 self._update_performance_stats(vloss, outputs, labels)
 
+        self.logger('eval')
         self._print_epoch_metrics('eval')
-        self.logger(self.get_epoch_metrics(), 'eval')
 
 
     @staticmethod

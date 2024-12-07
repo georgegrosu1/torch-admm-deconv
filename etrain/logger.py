@@ -12,9 +12,8 @@ class MetricsLogger:
         self._init_avg_stats(loss, metrics)
         self._init_step_stas()
 
-    def __call__(self, metrics_vals: dict[str, float], phase: str = 'train'):
-        for metric_name, metric_val in metrics_vals.items():
-            self.metrics[phase][metric_name].append(metric_val)
+    def __call__(self, phase: str = 'train'):
+        self.update_phase_avg_metrics(phase)
 
     def _init_avg_stats(self, loss: Metric, metrics: list[Metric]):
         all_metrics = [loss] + metrics
@@ -49,10 +48,15 @@ class MetricsLogger:
             return psnr_compute(np.mean(self._step_metrics['mse']))
         return np.mean(self._step_metrics[metric_name])
 
-    def get_avg_metrics(self, phase: str):
+    def update_phase_avg_metrics(self, phase: str):
         for metric_name in self._step_metrics:
-            self.metrics[phase][metric_name] = self.get_avg_metric_val(metric_name)
-        return self.metrics[phase]
+            self.metrics[phase][metric_name].append(self.get_avg_metric_val(metric_name))
+
+    def get_avg_metrics(self, phase: str):
+        avg_metrics = {}
+        for metric_name in self.metrics[phase]:
+            avg_metrics[metric_name] = self.metrics[phase][metric_name][-1]
+        return avg_metrics
 
     def get_logged(self, reformat: bool = True) -> dict:
         if reformat:
