@@ -30,6 +30,8 @@ class MetricsLogger:
 
     def _init_for_psnr(self):
         self._step_metrics[MSE.m_name] = []
+        self.metrics['train'][MSE.m_name] = []
+        self.metrics['eval'][MSE.m_name] = []
 
     def reinit_step_stats(self):
         self._init_step_stas()

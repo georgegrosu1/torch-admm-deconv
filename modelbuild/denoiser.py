@@ -51,9 +51,9 @@ ALL_OUT_CHS = (AUTOENC1['dec_out_channels'][-1] + AUTOENC2['dec_out_channels'][-
 AUTOENC_OUT = {'in_channels': ALL_OUT_CHS,
             'enc_out_channels': [16, 32, 64, 16],
             'dec_out_channels': [16, 64, 32, 3],
-            'kernel_sizes': [11, 13, 15, 17],
+            'kernel_sizes': [15, 17, 19, 21],
             'activation': torch.nn.ReLU6(),
-            'pool_size': 5}
+            'pool_size': 7}
 
 
 class Denoiser(nn.Module):
