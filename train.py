@@ -30,7 +30,8 @@ def seed_everything(seed=42):
     torch.manual_seed(seed)
 
 
-def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, model_name: str, device: str):
+def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, model_name: str, device: str,
+                  model_ckpt: str = None):
     config_file_path = os.getcwd() + f'/{config_file}'
     with open(config_file_path, 'r') as f:
         train_cfg = json.load(f)
@@ -50,8 +51,14 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     net_saver = NNSaver(save_dir_path, model_name)
 
     model = Denoiser()
-    model = model.to(device)
     opt = torch.optim.Adam(model.parameters(), train_cfg['lr'])
+
+    if model_ckpt:
+        checkpoint = torch.load(model_ckpt, weights_only=True)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        opt.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    model = model.to(device)
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=0.93)
 
     eval_metrics = [MSSSIMMetric(device), PSNRMetric(device), SCCMetric(device)]
@@ -79,9 +86,12 @@ def main():
                              default=r'image_restorer')
     args_parser.add_argument('--device', '-d', type=str, help='Training device (cuda | cpu)',
                             default='cuda')
+    args_parser.add_argument('--model_ckpt', '-c', type=str, help='Path to model checkpoint',
+                             default=None)
     args = args_parser.parse_args()
 
-    init_training(args.config_file, args.min_awgn, args.max_awgn, args.save_dir, args.model_name, args.device)
+    init_training(args.config_file, args.min_awgn, args.max_awgn, args.save_dir, args.model_name, args.device,
+                  args.model_ckpt)
 
 
 if __name__ == "__main__":
