@@ -14,7 +14,7 @@ class RandCrop(object):
     def __call__(self, x_img, y_img):
         x_im, y_im = x_img, y_img
 
-        h, w = y_im.shape[-2:]
+        _, h, w = y_im.shape
         new_h, new_w = self.im_shape
 
         top = torch.randint(0, h - new_h + 1, (1,)).tolist()[0]
@@ -28,7 +28,7 @@ class RandCrop(object):
 
 class Scale(object):
     def __call__(self, x_img, y_img):
-        return x_img / 255, y_img / 255
+        return x_img / 255.0, y_img / 255.0
 
 
 class AddAWGN(object):
@@ -49,5 +49,5 @@ class AddAWGN(object):
         std = torch.randint(self.std_range[0], self.std_range[1], (1,)).item() / 255.0
         awgn = torch.clamp(torch.randn(x_img.shape).to(x_img.device) * std + self.mean, self.minval, self.maxval)
         if self.both:
-            return torch.clamp(x_img + awgn, 0.0, 1.0), torch.clamp(y_img + awgn, self.minval, self.maxval)
+            return torch.clamp(x_img + awgn, self.minval, self.maxval), torch.clamp(y_img + awgn, self.minval, self.maxval)
         return torch.clamp(x_img + awgn, self.minval, self.maxval), y_img

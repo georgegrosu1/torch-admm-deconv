@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC
 
 import torch
 from torchmetrics.image import (StructuralSimilarityIndexMeasure,
@@ -16,7 +16,7 @@ class Metric(ABC):
         super().__init__()
         self.device = device
 
-    def __call__(self, y_true, y_pred):
+    def __call__(self, y_true: torch.Tensor, y_pred: torch.Tensor):
         raise NotImplementedError
 
 
@@ -38,8 +38,18 @@ class SSIMLoss(Metric):
         super().__init__(device)
         self._func = StructuralSimilarityIndexMeasure(data_range=data_range).to(device)
 
-    def __call__(self, y_true, y_pred):
-        return 1.0 - self._func(y_true, y_pred)
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return 1.0 - self._func(y_pred, y_true)
+
+
+class MAELoss(Metric):
+    m_name = 'mae_loss'
+    def __init__(self, device: str):
+        super().__init__(device)
+        self._func = torch.nn.L1Loss().to(device)
+
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self._func(y_pred, y_true)
 
 
 class MSSSIMLoss(Metric):
@@ -49,8 +59,8 @@ class MSSSIMLoss(Metric):
         super().__init__(device)
         self._func = MultiScaleStructuralSimilarityIndexMeasure(data_range=data_range).to(device)
 
-    def __call__(self, y_true, y_pred):
-        return 1 - self._func(y_true, y_pred)
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return 1 - self._func(y_pred, y_true)
 
 
 class SSIMMetric(Metric):
@@ -60,8 +70,8 @@ class SSIMMetric(Metric):
         super().__init__(device)
         self._func = StructuralSimilarityIndexMeasure(data_range=data_range).to(device)
 
-    def __call__(self, y_true, y_pred):
-        return self._func(y_true, y_pred)
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self._func(y_pred, y_true)
 
 
 class MSSSIMMetric(Metric):
@@ -71,8 +81,8 @@ class MSSSIMMetric(Metric):
         super().__init__(device)
         self._func = MultiScaleStructuralSimilarityIndexMeasure(data_range=data_range).to(device)
 
-    def __call__(self, y_true, y_pred):
-        return self._func(y_true, y_pred)
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self._func(y_pred, y_true)
 
 
 class PSNRMetric(Metric):
@@ -82,8 +92,8 @@ class PSNRMetric(Metric):
         super().__init__(device)
         self._func = PeakSignalNoiseRatio(data_range=data_range).to(device)
 
-    def __call__(self, y_true, y_pred):
-        return self._func(y_true, y_pred)
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self._func(y_pred, y_true)
 
 
 class UIQMetric(Metric):
@@ -93,8 +103,8 @@ class UIQMetric(Metric):
         super().__init__(device)
         self._func = UniversalImageQualityIndex().to(device)
 
-    def __call__(self, y_true, y_pred):
-        return self._func(y_true, y_pred)
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self._func(y_pred, y_true)
 
 
 class SCCMetric(Metric):
@@ -104,5 +114,5 @@ class SCCMetric(Metric):
         super().__init__(device)
         self._func = SpatialCorrelationCoefficient().to(device)
 
-    def __call__(self, y_true, y_pred):
-        return self._func(y_true, y_pred)
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self._func(y_pred, y_true)

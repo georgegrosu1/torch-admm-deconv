@@ -101,7 +101,7 @@ class NNTrainer:
                 outputs = model(inputs)
                 vloss = self.loss(outputs, labels)
                 if lr_scheduler is not None:
-                    lr_scheduler.step(vloss)
+                    lr_scheduler.step()
                 self._update_performance_stats(vloss, outputs, labels)
 
         self.logger('eval')
