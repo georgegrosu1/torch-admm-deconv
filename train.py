@@ -6,19 +6,30 @@ import argparse
 from pathlib import Path
 
 import torch
+import torchvision
 import numpy as np
 
 from eprocessing.dataload import ImageDataset
 
 from modelbuild.restorer import Restorer
 from modelbuild.updownscale import UpDownScale
-from modelbuild.denoiser import Denoiser
+from modelbuild.denoiser import DivergentRestorer
 
 from eprocessing.etransforms import Scale, RandCrop, AddAWGN
 from etrain.trainer import NNTrainer
 from etrain.logger import MetricsLogger
 from etrain.saver import NNSaver
 from emetrics.metrics import *
+
+
+DECONV1 = {'kern_size': (),
+         'max_iters': 80,
+         'lmbda': 0.02,
+         'iso': True}
+DECONV2 = {'kern_size': (),
+         'max_iters': 80,
+         'rho': 0.004,
+         'iso': True}
 
 
 def seed_everything(seed=42):
@@ -50,7 +61,10 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
 
-    model = Denoiser()
+    model = DivergentRestorer(3, 2, 3,
+                              3, 3, 64,
+                              64, 4,
+                              output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
     model = model.to(device)
     opt = torch.optim.Adam(model.parameters(), train_cfg['lr'])
 
@@ -59,10 +73,10 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
         model.load_state_dict(checkpoint['model_state_dict'])
         opt.load_state_dict(checkpoint['optimizer_state_dict'])
 
-    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=0.93)
+    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=0.95)
 
-    eval_metrics = [MSSSIMMetric(device), PSNRMetric(device), SCCMetric(device)]
-    loss_func = SSIMLoss(device)
+    eval_metrics = [PSNRMetric(device), SCCMetric(device)]
+    loss_func = MAELoss(device)
 
     metrics_logger = MetricsLogger(loss_func, eval_metrics)
     net_trainer = NNTrainer(loss_func, eval_metrics, net_saver, metrics_logger)
