@@ -1,14 +1,14 @@
 {
   "train": {
-    "x_path": "D:/Projects/datasets/RealBlur/awgn-15_60/train/x",
-    "y_path": "D:/Projects/datasets/RealBlur/awgn-15_60/train/y"
+    "x_path": "C:/Users/40774/Dev/datasets/GoPro/orig_blur/awgn-0-0/train/y",
+    "y_path": "C:/Users/40774/Dev/datasets/GoPro/orig_blur/awgn-0-0/train/y"
   },
   "eval": {
-    "x_path": "D:/Projects/datasets/RealBlur/awgn-15_60/test/x",
-    "y_path": "D:/Projects/datasets/RealBlur/awgn-15_60/test/y"
+    "x_path": "C:/Users/40774/Dev/datasets/GoPro/orig_blur/awgn-0-0/test/y",
+    "y_path": "C:/Users/40774/Dev/datasets/GoPro/orig_blur/awgn-0-0/test/y"
   },
   "im_shape": [256, 256],
   "batch_size": 2,
-  "lr": 4e-3,
-  "epochs": 50
+  "lr": 5e-4,
+  "epochs": 500
 }

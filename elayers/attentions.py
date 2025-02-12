@@ -63,6 +63,12 @@ class ChannelGate(nn.Module):
             nn.GELU(),
             nn.Linear(gate_channels // reduction_ratio, gate_channels)
         )
+        self.nova = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(gate_channels, gate_channels * reduction_ratio),
+            nn.Sigmoid(),
+            nn.Linear(gate_channels * reduction_ratio, gate_channels)
+        )
         self.pool_types = pool_types
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -80,10 +86,11 @@ class ChannelGate(nn.Module):
                 pool_out = logsumexp_2d(x)
 
             channel_att_raw = self.mlp(pool_out)
+            channel_nova_raw = self.nova(pool_out)
             if channel_att_sum is None:
-                channel_att_sum = channel_att_raw
+                channel_att_sum = channel_att_raw * channel_nova_raw
             else:
-                channel_att_sum = channel_att_sum + channel_att_raw
+                channel_att_sum = channel_att_sum + channel_att_raw * channel_nova_raw
 
         return x * torchf.sigmoid(channel_att_sum).unsqueeze(2).unsqueeze(3).expand_as(x)
 

@@ -32,6 +32,20 @@ DECONV2 = {'kern_size': (),
          'iso': True}
 
 
+class WeightClipper(object):
+
+    def __call__(self, module):
+        # filter the variables to get the ones you want
+        if hasattr(module, 'lmbda'):
+            w = module.lmbda.data
+            w = w.clamp(1e-12, 5)
+            module.lmbda.data = w
+        if hasattr(module, 'rho'):
+            w = module.rho.data
+            w = w.clamp(1e-12, 5)
+            module.rho.data = w
+
+
 def seed_everything(seed=42):
     random.seed(seed)
     cv2.setRNGSeed(seed)
@@ -62,9 +76,11 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     net_saver = NNSaver(save_dir_path, model_name)
 
     model = DivergentRestorer(3, 2, 3,
-                              3, 3, 64,
-                              64, 4,
-                              output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
+                              3, 4, 86,
+                              86, 8,
+                               output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
+    # clipper = WeightClipper()
+    # model.apply(clipper)
     model = model.to(device)
     opt = torch.optim.Adam(model.parameters(), train_cfg['lr'])
 
@@ -75,7 +91,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
 
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=0.95)
 
-    eval_metrics = [PSNRMetric(device), SCCMetric(device)]
+    eval_metrics = [PSNRMetric(device), SCCMetric(device), SSIMMetric(device)]
     loss_func = MAELoss(device)
 
     metrics_logger = MetricsLogger(loss_func, eval_metrics)

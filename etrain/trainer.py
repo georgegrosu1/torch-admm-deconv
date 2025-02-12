@@ -56,6 +56,7 @@ class NNTrainer:
             outputs = model(inputs)
             loss = self.loss(outputs, labels)
             loss.backward()
+            torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=1)
             optimizer.step()
 
             self._update_performance_stats(loss, outputs, labels)
