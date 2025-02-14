@@ -23,11 +23,11 @@ from emetrics.metrics import *
 
 
 DECONV1 = {'kern_size': (),
-         'max_iters': 80,
+         'max_iters': 100,
          'lmbda': 0.02,
          'iso': True}
 DECONV2 = {'kern_size': (),
-         'max_iters': 80,
+         'max_iters': 100,
          'rho': 0.004,
          'iso': True}
 
@@ -76,8 +76,8 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     net_saver = NNSaver(save_dir_path, model_name)
 
     model = DivergentRestorer(3, 2, 3,
-                              3, 4, 86,
-                              86, 8,
+                              3, 4, 128,
+                              128, 8,
                                output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
     # clipper = WeightClipper()
     # model.apply(clipper)
@@ -91,8 +91,8 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
 
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=0.95)
 
-    eval_metrics = [PSNRMetric(device), SCCMetric(device), SSIMMetric(device)]
-    loss_func = MAELoss(device)
+    eval_metrics = [PSNRMetric(device), SCCMetric(device), SSIMMetric(device), MAELoss(device)]
+    loss_func = SSIMLoss(device)
 
     metrics_logger = MetricsLogger(loss_func, eval_metrics)
     net_trainer = NNTrainer(loss_func, eval_metrics, net_saver, metrics_logger)
