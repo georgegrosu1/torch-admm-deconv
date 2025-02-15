@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as torchf
 
+from elayers.varmap import ChannelwiseVariance
+
 
 def logsumexp_2d(x: torch.Tensor) -> torch.Tensor:
     tensor_flatten = x.view(x.size(0), x.size(1), -1)
@@ -54,18 +56,21 @@ class SpatialGate(nn.Module):
 
 
 class ChannelGate(nn.Module):
-    def __init__(self, gate_channels, reduction_ratio=16, pool_types=('avg', 'max')):
+    def __init__(self, gate_channels, reduction_ratio=16, pool_types=('avg', 'max'), varmap: bool = True):
         super(ChannelGate, self).__init__()
+        self.varmap = ChannelwiseVariance() if varmap else nn.Identity()
         self.gate_channels = gate_channels
         self.mlp = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(gate_channels, gate_channels // reduction_ratio),
+            nn.Linear(self.gate_channels, self.gate_channels // reduction_ratio),
             nn.GELU(),
-            nn.Linear(gate_channels // reduction_ratio, gate_channels)
+            nn.Linear(self.gate_channels // reduction_ratio, self.gate_channels)
         )
         self.pool_types = pool_types
 
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x -= self.varmap(x)
         channel_att_sum, pool_out = None, None
         for pool_type in self.pool_types:
             if pool_type == 'avg':
