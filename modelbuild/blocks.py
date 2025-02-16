@@ -107,7 +107,8 @@ class DivergentAttention(nn.Module):
                  gate_channels: int,
                  attention_reduction: int,
                  out_activation: nn.Module = None,
-                 admms: list[dict] = None):
+                 admms: list[dict] = None,
+                 use_varmap: bool = False):
         super(DivergentAttention, self).__init__()
 
         if admms is not None:
@@ -124,7 +125,7 @@ class DivergentAttention(nn.Module):
             self.convs.append(nn.Conv2d(in_channels=in_channels, out_channels=conv_filters, kernel_size=1, stride=1,
                                         padding=0, bias=True))
             self.attentions.append(CBAM(gate_channels=gate_channels, reduction_ratio=attention_reduction,
-                                        pool_types=self._pool_types[i%2], use_spatial=True))
+                                        pool_types=self._pool_types[i%2], use_spatial=True, use_varmap=use_varmap))
             if admms is not None:
                 self.admms.append(ADMMDeconv(**admms[i]))
 

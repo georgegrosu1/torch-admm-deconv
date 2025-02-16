@@ -32,7 +32,8 @@ class DivergentRestorer(nn.Module):
                                                       gate_channels=gate_channels,
                                                       attention_reduction=attention_reduction,
                                                       out_activation=intermediate_activation,
-                                                      admms=admms))
+                                                      admms=admms,
+                                                      use_varmap=True))
             elif i == num_levels - 1:
                 self.blocks.append(DivergentAttention(branches=self._level_branches[i],
                                                       in_channels=filters,
