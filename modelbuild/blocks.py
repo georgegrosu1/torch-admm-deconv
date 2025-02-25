@@ -119,11 +119,13 @@ class DivergentAttention(nn.Module):
         self.out_activation = out_activation if out_activation is not None else nn.Identity()
         self.convs = nn.ModuleList()
         self.attentions = nn.ModuleList()
-        self.convout = nn.Conv2d(in_channels=conv_filters*branches+in_channels, out_channels=out_channels,
+        self.convout = nn.Conv2d(in_channels=conv_filters*branches, out_channels=out_channels,
                                  kernel_size=1, stride=1, padding=0, bias=True)
         for i in range(branches):
             self.convs.append(nn.Conv2d(in_channels=in_channels, out_channels=conv_filters, kernel_size=1, stride=1,
                                         padding=0, bias=True))
+            self.convs.append(UpDownBlock(up_in_ch=in_channels, up_out_ch=in_channels, down_out_ch=conv_filters,
+                                          kernel_size=2))
             self.attentions.append(CBAM(gate_channels=gate_channels, reduction_ratio=attention_reduction,
                                         pool_types=self._pool_types[i%2], use_spatial=True, use_varmap=use_varmap))
             if admms is not None:
@@ -142,11 +144,11 @@ class DivergentAttention(nn.Module):
                                     zip(self.attentions[:len(self.attentions) // 2], outs[:len(outs) // 2])], dim=1)
         outs_b = torch.cat(tensors=[attention(feat) + feat for attention, feat in
                                     zip(self.attentions[len(self.attentions) // 2:], outs[len(outs) // 2:])], dim=1)
-        outs = torch.cat([outs_a * outs_b, outs_a + outs_b, x], dim=1)
+        outs = torch.cat([outs_a * outs_b, outs_a + outs_b], dim=1)
         return self.out_activation(self.convout(outs))
 
 
-class UpDownBock(nn.Module):
+class UpDownBlock(nn.Module):
     def __init__(self,
                  up_in_ch: int, up_out_ch: int,
                  down_out_ch: int,
@@ -154,15 +156,13 @@ class UpDownBock(nn.Module):
                  activation: nn.Module = None,
                  normalization: nn.Module = None,
                  pool_size: int = 0):
-        super(UpDownBock, self).__init__()
+        super(UpDownBlock, self).__init__()
         self.up_block = UpBlock(up_in_ch, up_out_ch, kernel_size, normalization, activation, pool_size)
         self.down_block = DownBlock(up_out_ch, down_out_ch, kernel_size,normalization,  activation, pool_size)
-        self.cbam = CBAM(down_out_ch, reduction_ratio=2, pool_types=('avg', 'max', 'lp', 'lse'), use_spatial=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.up_block(x)
         x = self.down_block(x)
-        x = self.cbam(x)
         return x
 
 
@@ -183,7 +183,6 @@ class DownBlock(nn.Module):
         self.normalization = normalization
         self.activation = activation
         self.max_pool = nn.MaxPool2d(kernel_size=pool_size, stride=1) if pool_size != 0 else None
-        self.cbam = CBAM(out_channels, reduction_ratio=2, pool_types=('avg', 'max', 'lp', 'lse'), use_spatial=True)
 
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -191,7 +190,6 @@ class DownBlock(nn.Module):
         x = self.normalization(x) if self.normalization is not None else x
         x = self.activation(x) if self.activation is not None else x
         x = self.max_pool(x) if self.max_pool is not None else x
-        x = self.cbam(x)
         return x
 
 
@@ -212,7 +210,6 @@ class UpBlock(nn.Module):
         self.normalization = normalization
         self.max_pool = nn.MaxPool2d(kernel_size=pool_size, stride=1) if pool_size != 0 else None
         self.activation = activation
-        self.cbam = CBAM(out_channels, reduction_ratio=2, pool_types=('avg', 'max', 'lp', 'lse'), use_spatial=True)
 
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -220,7 +217,6 @@ class UpBlock(nn.Module):
         x = self.normalization(x) if self.normalization is not None else x
         x = self.activation(x) if self.activation is not None else x
         x = self.max_pool(x) if self.max_pool is not None else x
-        x = self.cbam(x)
         return x
 
 

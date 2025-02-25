@@ -76,8 +76,8 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     net_saver = NNSaver(save_dir_path, model_name)
 
     model = DivergentRestorer(3, 2, 3,
-                              3, 4, 128,
-                              128, 8,
+                              3, 4, 74,
+                              74, 8,
                                output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
     # clipper = WeightClipper()
     # model.apply(clipper)
