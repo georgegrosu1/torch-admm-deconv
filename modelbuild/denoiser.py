@@ -36,7 +36,7 @@ class DivergentRestorer(nn.Module):
                                                       use_varmap=True))
             elif i == num_levels - 1:
                 self.blocks.append(DivergentAttention(branches=self._level_branches[i],
-                                                      in_channels=filters,
+                                                      in_channels=filters + 3,
                                                       out_channels=final_channels,
                                                       conv_filters=filters,
                                                       gate_channels=gate_channels,
@@ -44,7 +44,7 @@ class DivergentRestorer(nn.Module):
                                                       out_activation=output_activation))
             else:
                 self.blocks.append(DivergentAttention(branches=self._level_branches[i],
-                                                      in_channels=filters,
+                                                      in_channels=filters + 3,
                                                       out_channels=filters,
                                                       conv_filters=filters,
                                                       gate_channels=gate_channels,
@@ -52,6 +52,7 @@ class DivergentRestorer(nn.Module):
                                                       out_activation=intermediate_activation))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        for block in self.blocks:
-            x = block(x)
-        return x
+        out = self.blocks[0](x)
+        for i in range(1, len(self.blocks)):
+            out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
+        return out
