@@ -161,12 +161,14 @@ class UpDownBlock(nn.Module):
         self.down_block = DownBlock(up_out_ch, down_out_ch, kernel_size, normalization, activation, pool_size)
         self.chc = nn.Conv2d(in_channels=up_out_ch, out_channels=up_out_ch, kernel_size=1, stride=1,
                                         padding=0, bias=True)
+        self.chc2 = nn.Conv2d(in_channels=down_out_ch, out_channels=down_out_ch, kernel_size=1, stride=1,
+                             padding=0, bias=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.up_block(x)
         x = self.chc(x)
         x = self.down_block(x)
-        return x
+        return self.chc2(x)
 
 
 class DownBlock(nn.Module):
