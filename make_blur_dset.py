@@ -1,8 +1,15 @@
 import argparse
 from tqdm import tqdm
 from pathlib import Path
+from enum import Enum
 
 from utils.dset_utils import *
+
+
+class Dset(Enum):
+    GOPRO = 'gopro'
+    HIDE = 'hide'
+    REALBLUR = 'realblur'
 
 
 def get_train_test_txts(orig_p: Path) -> Tuple[List, List]:
@@ -55,6 +62,18 @@ def get_gopro_subset_im_paths(setdir: Path, subset: str = 'blur') -> tuple[list[
         return x_im_paths, y_im_paths
 
 
+def get_hided_subset_im_paths(set_dir: Path) -> tuple[list[Path], list[Path]]:
+    subset = set_dir.stem
+    subset_txt_p = set_dir.parent / (subset + '.txt')
+    with open(subset_txt_p, 'r') as f:
+        lines = f.readlines()
+
+    x_paths = [set_dir.parent / subset / line.replace('\n', '') for line in lines]
+    y_paths = [set_dir.parent / 'GT' / line.replace('\n', '') for line in lines]
+
+    return x_paths, y_paths
+
+
 def make_gopro_dset(orig: str,
                     save_dir_train_x: Path, save_dir_train_y: Path,
                     save_dir_test_x: Path, save_dir_test_y: Path,
@@ -72,21 +91,36 @@ def make_gopro_dset(orig: str,
     process_x_y_ims(test_x, test_y, min_noise_std, max_noise_std, save_dir_test_x, save_dir_test_y)
 
 
+def make_hide_dset(orig: str,
+                   save_dir_train_x: Path, save_dir_train_y: Path,
+                   save_dir_test_x: Path, save_dir_test_y: Path,
+                   min_noise_std: int, max_noise_std: int) -> None:
+
+    train_dirs = Path(fr'{orig}/train')
+    test_dirs = Path(fr'{orig}/test')
+    train_x, train_y = get_hided_subset_im_paths(train_dirs)
+    train_x, train_y = train_x[::3], train_y[::3]
+    print('\n\nProcessing train data')
+    process_x_y_ims(train_x, train_y, min_noise_std, max_noise_std, save_dir_train_x, save_dir_train_y)
+    test_x, test_y = get_hided_subset_im_paths(test_dirs)
+    print('\n\nProcessing test data')
+    process_x_y_ims(test_x, test_y, min_noise_std, max_noise_std, save_dir_test_x, save_dir_test_y)
+
+
+
 def main():
     args_parser = argparse.ArgumentParser(description='Script to generate dataset with noise and blur')
     args_parser.add_argument('--dset', '-d', type=str, help='Dataset',
-                             default=r'gopro')
+                             default=r'hide')
     args_parser.add_argument('--orig', '-o', type=str, help='Path to RealBlur dir',
-                             default=r'D:/Projects/datasets/RealBlur')
+                             default=r'D:/Projects/datasets/HIDE_dataset')
     args_parser.add_argument('--save_dir', '-s', type=str, help='Dir (relative to cwd) to save images',
-                             default=r'D:/Projects/datasets/RealBlur/orig_blur')
+                             default=r'D:/Projects/datasets/HIDE_dataset/orig_blur')
     args_parser.add_argument('--min_noise_std', '-m', type=int, help='Minimum std of noise level',
                              default=15)
     args_parser.add_argument('--max_noise_std', '-M', type=int, help='Maximum std of noise level',
                              default=60)
     args = args_parser.parse_args()
-
-
 
     save_dir_train = Path(args.save_dir) / f'awgn-{args.min_noise_std}-{args.max_noise_std}' / 'train'
     save_dir_train_x, save_dir_train_y = save_dir_train / 'x', save_dir_train / 'y'
@@ -98,12 +132,17 @@ def main():
     save_dir_test_x.mkdir(parents=True, exist_ok=True)
     save_dir_test_y.mkdir(parents=True, exist_ok=True)
 
-    if args.dset == 'gopro':
+    if args.dset == Dset.GOPRO.value:
         make_gopro_dset(args.orig, save_dir_train_x, save_dir_train_y, save_dir_test_x, save_dir_test_y,
                         args.min_noise_std, args.max_noise_std)
-    elif args.dset == 'realblur':
+    elif args.dset == Dset.HIDE.value:
+        make_hide_dset(args.orig, save_dir_train_x, save_dir_train_y, save_dir_test_x, save_dir_test_y,
+                       args.min_noise_std, args.max_noise_std)
+    elif args.dset == Dset.REALBLUR.value:
         make_realblur_dset(args.orig, save_dir_train_x, save_dir_train_y, save_dir_test_x, save_dir_test_y,
                            args.min_noise_std, args.max_noise_std)
+    else:
+        raise NotImplementedError
 
 
 if __name__ == "__main__":
