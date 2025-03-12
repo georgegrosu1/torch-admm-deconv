@@ -160,9 +160,9 @@ class UpDownBlock(nn.Module):
         self.up_block = UpBlock(up_in_ch, up_out_ch, kernel_size, normalization, activation, pool_size)
         self.down_block = DownBlock(up_out_ch, down_out_ch, kernel_size, normalization, activation, pool_size)
         self.chc = nn.Conv2d(in_channels=up_out_ch, out_channels=up_out_ch, kernel_size=1, stride=1,
-                                        padding=0, bias=True)
+                                        padding=0, bias=False)
         self.chc2 = nn.Conv2d(in_channels=down_out_ch, out_channels=down_out_ch, kernel_size=1, stride=1,
-                             padding=0, bias=True)
+                             padding=0, bias=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.up_block(x)
@@ -182,7 +182,7 @@ class DownBlock(nn.Module):
         super(DownBlock, self).__init__()
         kernel_size = kernel_size if isinstance(kernel_size, tuple) else (kernel_size, kernel_size)
         self.down_conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
-                                   stride=1, padding=max(0, pool_size-1), padding_mode='zeros', bias=True)
+                                   stride=1, padding=max(0, pool_size-1), padding_mode='zeros', bias=False)
         default_init_weights(self.down_conv)
 
         self.normalization = normalization
@@ -209,7 +209,7 @@ class UpBlock(nn.Module):
         super(UpBlock, self).__init__()
 
         self.up_conv = nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
-                                          stride=1, bias=True)
+                                          stride=1, bias=False)
         default_init_weights(self.up_conv)
 
         self.normalization = normalization
