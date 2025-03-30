@@ -67,19 +67,25 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
 
+    if model_ckpt:
+        entry_model = DivergentRestorer(3, 2, 3,
+                                        3, 4, 86,
+                                        86, 8,
+                                        output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
+        checkpoint = torch.load(model_ckpt, weights_only=False, map_location=device)
+        entry_model.load_state_dict(checkpoint['model_state_dict'])
+        # Freeze all
+        for param in entry_model.parameters():
+            param.requires_grad = False
+
     model = DivergentRestorer(3, 2, 3,
                               3, 4, 86,
                               86, 8,
-                               output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
+                               output_activation=torch.nn.Sigmoid())
     # clipper = WeightClipper()
     # model.apply(clipper)
     model = model.to(device)
     opt = torch.optim.Adam(model.parameters(), train_cfg['lr'])
-
-    if model_ckpt:
-        checkpoint = torch.load(model_ckpt, weights_only=False, map_location=device)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        opt.load_state_dict(checkpoint['optimizer_state_dict'])
 
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=0.95)
 
@@ -108,7 +114,7 @@ def main():
                              default=r'image_restorer')
     args_parser.add_argument('--device', '-d', type=str, help='Training device (cuda | cpu)',
                             default='cuda')
-    args_parser.add_argument('--model_ckpt', '-k', type=str, help='Path to model checkpoint',
+    args_parser.add_argument('--entry_module_ckp', '-k', type=str, help='Path to model checkpoint to use',
                              default=None)
     args = args_parser.parse_args()
 

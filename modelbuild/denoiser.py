@@ -15,13 +15,15 @@ class DivergentRestorer(nn.Module):
                  attention_reduction: int,
                  intermediate_activation: nn.Module = None,
                  output_activation: nn.Module = None,
-                 admms: list[dict] = None):
+                 admms: list[dict] = None,
+                 frozen: nn.Module = None):
         super(DivergentRestorer, self).__init__()
 
         self._level_branches = [init_branches]
         for i in range(1, num_levels):
             self._level_branches.append(self._level_branches[-1] * divergence_factor)
 
+        self.frozen = frozen
         self.blocks = nn.ModuleList()
         for i in range(num_levels):
             if i == 0:
@@ -52,7 +54,8 @@ class DivergentRestorer(nn.Module):
                                                       out_activation=intermediate_activation))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out = self.blocks[0](x)
+        out = self.frozen(x) if self.frozen is not None else x
+        out = self.blocks[0](out)
         for i in range(1, len(self.blocks)):
             out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
         return out
