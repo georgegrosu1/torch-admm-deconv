@@ -9,6 +9,6 @@
   },
   "im_shape": [256, 256],
   "batch_size": 2,
-  "lr": 5e-4,
+  "lr": 8.8e-4,
   "epochs": 500
 }

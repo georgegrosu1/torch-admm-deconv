@@ -17,11 +17,11 @@ def soft_thresh(x: torch.Tensor, tau: float) -> torch.Tensor:
 
 
 def block_thresh(x: torch.Tensor, tau: torch.Tensor) -> torch.Tensor:
-    return torch.maximum(1 - tau / (pixelnorm(x) + 1e-12), torch.tensor([0], dtype=x.dtype, device=x.device)) * x
+    return torch.maximum(1 - tau / (pixelnorm(x) + 1e-15), torch.tensor([0], dtype=x.dtype, device=x.device)) * x
 
 
 def pixelnorm(x: torch.Tensor) -> torch.Tensor:
-    return torch.sqrt(torch.sum(x ** 2, (0, 1)) + 1e-12)
+    return torch.sqrt(torch.sum(x ** 2, (0, 1)) + 1e-15)
 
 
 def identity(x: torch.Tensor) -> torch.Tensor:

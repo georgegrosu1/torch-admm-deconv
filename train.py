@@ -18,11 +18,9 @@ from emetrics.metrics import *
 
 DECONV1 = {'kern_size': (),
          'max_iters': 100,
-         'lmbda': 0.02,
          'iso': True}
 DECONV2 = {'kern_size': (),
          'max_iters': 100,
-         'rho': 0.004,
          'iso': True}
 
 
@@ -85,7 +83,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
 
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=0.95)
 
-    eval_metrics = [PSNRMetric(device), SCCMetric(device), SSIMMetric(device), MAELoss(device)]
+    eval_metrics = [PSNRMetric(device), SCCMetric(device), SSIMMetric(device), MAELoss(device), UIQMetric(device)]
     loss_func = SSIMLoss(device)
 
     metrics_logger = MetricsLogger(loss_func, eval_metrics)

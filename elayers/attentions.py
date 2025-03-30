@@ -38,7 +38,13 @@ class BasicConv(nn.Module):
 class ChannelPool(nn.Module):
     @staticmethod
     def forward(x: torch.Tensor) -> torch.Tensor:
-        return torch.cat((torch.max(x, 1)[0].unsqueeze(1), torch.mean(x, 1).unsqueeze(1)), dim=1)
+        return torch.cat((
+            torch.std(x, 1).unsqueeze(1),
+            # torch.max(x, 1)[0].unsqueeze(1),
+            # torch.mean(x, 1).unsqueeze(1),
+            torch.median(x, 1).values.unsqueeze(1),
+            torch.mode(x, 1).values.unsqueeze(1)
+        ), dim=1)
 
 
 class SpatialGate(nn.Module):
@@ -48,7 +54,7 @@ class SpatialGate(nn.Module):
                  ):
         super(SpatialGate, self).__init__()
         self.compress = ChannelPool()
-        self.spatial = BasicConv(2, 1, kernel_size, stride=1, padding=(kernel_size-1) // 2,
+        self.spatial = BasicConv(3, 1, kernel_size, stride=1, padding=(kernel_size-1) // 2,
                                  use_activation=use_activation)
 
     def forward(self, x: torch.Tensor):
