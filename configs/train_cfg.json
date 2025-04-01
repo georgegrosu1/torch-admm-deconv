@@ -1,5 +1,6 @@
 {
   "train": {
+    "ckpt": null,
     "x_path": "C:/Users/40774/Dev/datasets/GoPro/orig_blur/awgn-0-0/train/y",
     "y_path": "C:/Users/40774/Dev/datasets/GoPro/orig_blur/awgn-0-0/train/y"
   },
