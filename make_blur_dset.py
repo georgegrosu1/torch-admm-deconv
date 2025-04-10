@@ -1,6 +1,7 @@
 import argparse
 from tqdm import tqdm
 from pathlib import Path
+from scipy.io import loadmat
 from enum import Enum
 
 from utils.dset_utils import *
@@ -10,6 +11,7 @@ class Dset(Enum):
     GOPRO = 'gopro'
     HIDE = 'hide'
     REALBLUR = 'realblur'
+    SIDD = 'sidd'
 
 
 def get_train_test_txts(orig_p: Path) -> Tuple[List, List]:
@@ -22,7 +24,7 @@ def process_x_y_ims(x_ims: List, y_ims: List, min_stdv, max_stdv, sdir_x, sdir_y
     for x_p, y_p in tqdm(zip(x_ims, y_ims), total=len(y_ims)):
         im_hash = get_rand_uuid()
         imx, imy = cv2.imread(str(x_p), cv2.IMREAD_COLOR), cv2.imread(str(y_p), cv2.IMREAD_COLOR)
-        if max_stdv > min_stdv >= 0:
+        if max_stdv > 1 and max_stdv > min_stdv >= 0:
             r_stdv = np.random.randint(min_stdv, max_stdv)
             imx = add_noise_gaussian(imx, stdv=r_stdv)
         else:
@@ -74,6 +76,14 @@ def get_hided_subset_im_paths(set_dir: Path) -> tuple[list[Path], list[Path]]:
     return x_paths, y_paths
 
 
+def get_sidd_subset_im_paths(set_dir: Path) -> tuple[list[Path], list[Path]]:
+    png_files = list(set_dir.rglob("*.png"))
+    x_paths = [png_file for png_file in png_files if 'NOISY' in png_file.stem]
+    y_paths = [png_file for png_file in png_files if 'GT' in png_file.stem]
+
+    return x_paths, y_paths
+
+
 def make_gopro_dset(orig: str,
                     save_dir_train_x: Path, save_dir_train_y: Path,
                     save_dir_test_x: Path, save_dir_test_y: Path,
@@ -107,15 +117,49 @@ def make_hide_dset(orig: str,
     process_x_y_ims(test_x, test_y, min_noise_std, max_noise_std, save_dir_test_x, save_dir_test_y)
 
 
+def make_sidd_dset(orig: str,
+                   save_dir_train_x: Path, save_dir_train_y: Path,
+                   save_dir_test_x: Path, save_dir_test_y: Path,
+                   min_noise_std: int, max_noise_std: int) -> None:
+
+    def _process_sidd_test_x_y_ims(noisy_set, gt_set, sdir_x, sdir_y):
+        noisy_data, gt_data = loadmat(noisy_set)['ValidationNoisyBlocksSrgb'], loadmat(gt_set)['ValidationGtBlocksSrgb']
+        noisy_data = noisy_data.reshape(-1, noisy_data.shape[2], noisy_data.shape[3], noisy_data.shape[4])
+        gt_data = gt_data.reshape(-1, gt_data.shape[2], gt_data.shape[3], gt_data.shape[4])
+        for x_p, y_p in tqdm(zip(noisy_data, gt_data), total=len(gt_data)):
+            im_hash = get_rand_uuid()
+            imx_p, imy_p = sdir_x / f'{im_hash}.png', sdir_y / f'{im_hash}.png'
+            x_p = cv2.cvtColor(x_p, cv2.COLOR_BGR2RGB)
+            y_p = cv2.cvtColor(y_p, cv2.COLOR_BGR2RGB)
+            cv2.imwrite(imx_p, x_p)
+            cv2.imwrite(imy_p, y_p)
+
+    def _get_test_x_y(test_dir):
+        test_files = list(test_dir.glob('*.mat'))
+        x_set = [mfile for mfile in test_files if 'Noisy' in mfile.stem][0]
+        y_set = [mfile for mfile in test_files if 'Gt' in mfile.stem][0]
+
+        return x_set, y_set
+
+    train_dirs = Path(fr'{orig}/SIDD_Medium_Srgb/Data')
+    test_dirs = Path(fr'{orig}/validation')
+    # Process train
+    train_x, train_y = get_sidd_subset_im_paths(train_dirs)
+    # print('\n\nProcessing train data')
+    process_x_y_ims(train_x, train_y, min_noise_std, max_noise_std, save_dir_train_x, save_dir_train_y)
+    test_x, test_y = _get_test_x_y(test_dirs)
+    print('\n\nProcessing test data')
+    _process_sidd_test_x_y_ims(test_x, test_y, save_dir_test_x, save_dir_test_y)
+
 
 def main():
     args_parser = argparse.ArgumentParser(description='Script to generate dataset with noise and blur')
     args_parser.add_argument('--dset', '-d', type=str, help='Dataset',
-                             default=r'hide')
-    args_parser.add_argument('--orig', '-o', type=str, help='Path to RealBlur dir',
-                             default=r'D:/Projects/datasets/HIDE_dataset')
+                             default=r'sidd')
+    args_parser.add_argument('--orig', '-o', type=str, help='Path to orig dset dir',
+                             default=r'D:/Projects/datasets/SIDD')
     args_parser.add_argument('--save_dir', '-s', type=str, help='Dir (relative to cwd) to save images',
-                             default=r'D:/Projects/datasets/HIDE_dataset/orig_blur')
+                             default=r'D:/Projects/datasets/SIDD/orig')
     args_parser.add_argument('--min_noise_std', '-m', type=int, help='Minimum std of noise level',
                              default=15)
     args_parser.add_argument('--max_noise_std', '-M', type=int, help='Maximum std of noise level',
@@ -141,6 +185,9 @@ def main():
     elif args.dset == Dset.REALBLUR.value:
         make_realblur_dset(args.orig, save_dir_train_x, save_dir_train_y, save_dir_test_x, save_dir_test_y,
                            args.min_noise_std, args.max_noise_std)
+    elif args.dset == Dset.SIDD.value:
+        make_sidd_dset(args.orig, save_dir_train_x, save_dir_train_y, save_dir_test_x, save_dir_test_y,
+                       args.min_noise_std, args.max_noise_std)
     else:
         raise NotImplementedError
 
