@@ -152,6 +152,13 @@ def make_sidd_dset(orig: str,
     _process_sidd_test_x_y_ims(test_x, test_y, save_dir_test_x, save_dir_test_y)
 
 
+def make_darmstadt_dset(orig: str,
+                        save_dir_train_x: Path, save_dir_train_y: Path,
+                        save_dir_test_x: Path, save_dir_test_y: Path,
+                        min_noise_std: int, max_noise_std: int) -> None:
+    pass
+
+
 def main():
     args_parser = argparse.ArgumentParser(description='Script to generate dataset with noise and blur')
     args_parser.add_argument('--dset', '-d', type=str, help='Dataset',
