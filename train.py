@@ -8,6 +8,7 @@ from pathlib import Path
 
 from eprocessing.dataload import ImageDataset
 from modelbuild.denoiser import DivergentRestorer
+from modelbuild.nafnet import NAFNet
 
 from eprocessing.etransforms import Scale, RandCrop, AddAWGN
 from etrain.trainer import NNTrainer
@@ -81,11 +82,14 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     else:
         entry_model = None
 
-    model = DivergentRestorer(3, 2, 3,
-                              3, 4, 86,
-                              86, 8,
-                              output_activation=torch.nn.Sigmoid(),
-                              frozen=entry_model, denoise=False, admms=[DECONV1, DECONV2])
+    # model = DivergentRestorer(3, 2, 3,
+    #                           3, 4, 86,
+    #                           86, 8,
+    #                           output_activation=torch.nn.Sigmoid(),
+    #                           frozen=entry_model, denoise=False, admms=[DECONV1, DECONV2])
+
+    model = NAFNet(img_channel=3, width=64, middle_blk_num=12,
+                   enc_blk_nums=[2, 2, 4, 8], dec_blk_nums=[2, 2, 2, 2])
     # clipper = WeightClipper()
     # model.apply(clipper)
     model = model.to(device)
