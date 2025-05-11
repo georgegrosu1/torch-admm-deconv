@@ -12,6 +12,7 @@ class Dset(Enum):
     HIDE = 'hide'
     REALBLUR = 'realblur'
     SIDD = 'sidd'
+    RENOIR = 'renoir'
 
 
 def get_train_test_txts(orig_p: Path) -> Tuple[List, List]:
@@ -152,21 +153,54 @@ def make_sidd_dset(orig: str,
     _process_sidd_test_x_y_ims(test_x, test_y, save_dir_test_x, save_dir_test_y)
 
 
-def make_darmstadt_dset(orig: str,
-                        save_dir_train_x: Path, save_dir_train_y: Path,
-                        save_dir_test_x: Path, save_dir_test_y: Path,
-                        min_noise_std: int, max_noise_std: int) -> None:
-    pass
+def make_renoir_dset(orig: str,
+                     save_dir_train: Path,
+                     save_dir_test: Path) -> None:
+
+    def _get_train_test_im_paths(orig_p):
+        base = Path(orig_p)
+        all_ims = base.rglob('*.bmp')
+        references = np.array([im for im in all_ims if 'Reference' in str(im)])
+        train_set = np.random.choice(references, 100, replace=False)
+        test_set = np.random.choice(references[~np.isin(references, train_set)], 20, replace=False)
+        return train_set, test_set
+
+    def _extract_patches(image, patch_size, overlap_ratio=0.25):
+        step = int(patch_size * (1 - overlap_ratio))
+        height, width = image.shape[:2]
+        patches = []
+
+        for y in range(0, height - patch_size + 1, step):
+            for x in range(0, width - patch_size + 1, step):
+                patch = image[y:y + patch_size, x:x + patch_size]
+                patches.append(patch)
+
+        return patches
+
+    def _write_set(set_ims, save_set_dir):
+        for img in tqdm(set_ims):
+            img_arr = cv2.imread(str(img), cv2.IMREAD_COLOR)
+            patches = _extract_patches(img_arr, 256)
+            for idx, patch in enumerate(patches):
+                imsource = str(train_s[-1]).split('\\')[-3]
+                batch = str(train_s[-1]).split('\\')[-2]
+                im_hash = get_rand_uuid()
+                im_name = save_set_dir / f'{imsource}_{batch}_{idx}_{im_hash}.png'
+                cv2.imwrite(str(im_name), patch)
+
+    train_s, test_s = _get_train_test_im_paths(orig)
+    _write_set(train_s, save_dir_train)
+    _write_set(test_s, save_dir_test)
 
 
 def main():
     args_parser = argparse.ArgumentParser(description='Script to generate dataset with noise and blur')
     args_parser.add_argument('--dset', '-d', type=str, help='Dataset',
-                             default=r'sidd')
+                             default=r'renoir')
     args_parser.add_argument('--orig', '-o', type=str, help='Path to orig dset dir',
-                             default=r'D:/Projects/datasets/SIDD')
+                             default=r'D:/Projects/datasets/RENOIR')
     args_parser.add_argument('--save_dir', '-s', type=str, help='Dir (relative to cwd) to save images',
-                             default=r'D:/Projects/datasets/SIDD/orig')
+                             default=r'D:/Projects/datasets/RENOIR/orig')
     args_parser.add_argument('--min_noise_std', '-m', type=int, help='Minimum std of noise level',
                              default=15)
     args_parser.add_argument('--max_noise_std', '-M', type=int, help='Maximum std of noise level',
@@ -195,6 +229,8 @@ def main():
     elif args.dset == Dset.SIDD.value:
         make_sidd_dset(args.orig, save_dir_train_x, save_dir_train_y, save_dir_test_x, save_dir_test_y,
                        args.min_noise_std, args.max_noise_std)
+    elif args.dset == Dset.RENOIR.value:
+        make_renoir_dset(args.orig, save_dir_train_y, save_dir_test_y)
     else:
         raise NotImplementedError
 
