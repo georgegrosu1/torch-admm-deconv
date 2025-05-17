@@ -116,3 +116,32 @@ class SCCMetric(Metric):
 
     def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
         return self._func(y_pred, y_true)
+
+
+class PSNRLoss(Metric):
+    m_name = 'psnr_loss'
+
+    def __init__(self, device: str='cuda'):
+        super(PSNRLoss, self).__init__(device)
+        self.loss_weight = 1.0
+        self.scale = torch.tensor([10]) / torch.log(torch.tensor([10]).to(device))
+        self.to_y = False
+        self.coef = torch.tensor([65.481, 128.553, 24.966]).reshape(1, 3, 1, 1).to(device)
+        self.first = True
+
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        assert len(y_pred.size()) == 4
+        pred, target = y_pred, y_true
+        if self.to_y:
+            if self.first:
+                self.coef = self.coef.to(pred.device)
+                self.first = False
+
+            pred = (pred * self.coef).sum(dim=1).unsqueeze(dim=1) + 16.
+            target = (target * self.coef).sum(dim=1).unsqueeze(dim=1) + 16.
+
+            pred, target = pred / 255., target / 255.
+            pass
+        assert len(pred.size()) == 4
+
+        return self.loss_weight * self.scale * torch.log(((pred - target) ** 2).mean(dim=(1, 2, 3)) + 1e-8).mean()

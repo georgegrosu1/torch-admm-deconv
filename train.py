@@ -98,7 +98,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=0.95)
 
     eval_metrics = [PSNRMetric(device), SCCMetric(device), SSIMMetric(device), MAELoss(device), UIQMetric(device)]
-    loss_func = SSIMLoss(device)
+    loss_func = PSNRLoss(device)
 
     metrics_logger = MetricsLogger(loss_func, eval_metrics)
     net_trainer = NNTrainer(loss_func, eval_metrics, net_saver, metrics_logger)
