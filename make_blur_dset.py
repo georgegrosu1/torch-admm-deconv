@@ -181,11 +181,10 @@ def make_renoir_dset(orig: str,
         for img in tqdm(set_ims):
             img_arr = cv2.imread(str(img), cv2.IMREAD_COLOR)
             patches = _extract_patches(img_arr, 256)
+            imsource = str(img).split('\\')[-3]
+            batch = str(img).split('\\')[-2]
             for idx, patch in enumerate(patches):
-                imsource = str(train_s[-1]).split('\\')[-3]
-                batch = str(train_s[-1]).split('\\')[-2]
-                im_hash = get_rand_uuid()
-                im_name = save_set_dir / f'{imsource}_{batch}_{idx}_{im_hash}.png'
+                im_name = save_set_dir / f'{imsource}_{batch}_{idx}.png'
                 cv2.imwrite(str(im_name), patch)
 
     train_s, test_s = _get_train_test_im_paths(orig)
