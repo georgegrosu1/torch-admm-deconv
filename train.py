@@ -93,9 +93,9 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     # clipper = WeightClipper()
     # model.apply(clipper)
     model = model.to(device)
-    opt = torch.optim.Adam(model.parameters(), train_cfg['lr'])
+    opt = torch.optim.AdamW(model.parameters(), train_cfg['lr'], betas=(0.9, 0.9))
 
-    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=0.95)
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, eta_min=1e-7, T_max=400000)
 
     eval_metrics = [PSNRMetric(device), SCCMetric(device), SSIMMetric(device), MAELoss(device), UIQMetric(device)]
     loss_func = PSNRLoss(device)

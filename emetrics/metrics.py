@@ -124,7 +124,7 @@ class PSNRLoss(Metric):
     def __init__(self, device: str='cuda'):
         super(PSNRLoss, self).__init__(device)
         self.loss_weight = 1.0
-        self.scale = torch.tensor([10]) / torch.log(torch.tensor([10]).to(device))
+        self.scale = torch.tensor([10]).to(device) / torch.log(torch.tensor([10]).to(device))
         self.to_y = False
         self.coef = torch.tensor([65.481, 128.553, 24.966]).reshape(1, 3, 1, 1).to(device)
         self.first = True

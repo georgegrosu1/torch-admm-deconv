@@ -125,7 +125,7 @@ class DivergentAttention(nn.Module):
             self.convs.append(nn.Conv2d(in_channels=in_channels, out_channels=conv_filters, kernel_size=1, stride=1,
                                         padding=0, bias=True))
             self.convs.append(UpDownBlock(up_in_ch=in_channels, up_out_ch=in_channels, down_out_ch=conv_filters,
-                                          kernel_size=2))
+                                          kernel_size=3))
             self.attentions.append(CBAM(gate_channels=gate_channels, reduction_ratio=attention_reduction,
                                         pool_types=self._pool_types[i%2], use_spatial=True, use_varmap=use_varmap))
             if admms is not None:
