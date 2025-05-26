@@ -104,32 +104,27 @@ class DivergentAttention(nn.Module):
                  in_channels: int,
                  out_channels: int,
                  conv_filters: int,
+                 enc_depth:int, dec_depth:int, ae_filters: int, ae_kern_size: int,
                  gate_channels: int,
                  attention_reduction: int,
                  out_activation: nn.Module = None,
-                 admms: list[dict] = None,
                  use_varmap: bool = False):
         super(DivergentAttention, self).__init__()
 
-        if admms is not None:
-            assert len(admms) == branches
-
         self._pool_types = [('avg', 'max'), ('lp', 'lse')]
-        self.admms = nn.ModuleList() if admms is not None else None
         self.out_activation = out_activation if out_activation is not None else nn.Identity()
         self.convs = nn.ModuleList()
         self.attentions = nn.ModuleList()
         self.convout = nn.Conv2d(in_channels=conv_filters*branches, out_channels=out_channels,
                                  kernel_size=1, stride=1, padding=0, bias=True)
         for i in range(branches):
-            self.convs.append(nn.Conv2d(in_channels=in_channels, out_channels=conv_filters, kernel_size=1, stride=1,
-                                        padding=0, bias=True))
-            self.convs.append(UpDownBlock(up_in_ch=in_channels, up_out_ch=in_channels, down_out_ch=conv_filters,
-                                          kernel_size=3))
+            # self.convs.append(nn.Conv2d(in_channels=in_channels, out_channels=conv_filters, kernel_size=1, stride=1,
+            #                             padding=0, bias=True))
+            self.convs.append(AEBlock(enc_depth, dec_depth, in_channels, ae_filters, ae_kern_size))
+            # self.convs.append(UpDownBlock(up_in_ch=in_channels, up_out_ch=in_channels, down_out_ch=conv_filters,
+            #                               kernel_size=3))
             self.attentions.append(CBAM(gate_channels=gate_channels, reduction_ratio=attention_reduction,
                                         pool_types=self._pool_types[i%2], use_spatial=True, use_varmap=use_varmap))
-            if admms is not None:
-                self.admms.append(ADMMDeconv(**admms[i]))
 
         for conv in self.convs:
             default_init_weights(conv)
@@ -137,7 +132,7 @@ class DivergentAttention(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.admms is not None:
-            outs = [conv(admm(x)) for conv, admm in zip(self.convs, self.admms)]
+            outs = [conv(x) for conv in self.convs]
         else:
             outs = [conv(x) for conv in self.convs]
         outs_a = torch.cat(tensors=[attention(feat) + feat for attention, feat in
@@ -146,6 +141,44 @@ class DivergentAttention(nn.Module):
                                     zip(self.attentions[len(self.attentions) // 2:], outs[len(outs) // 2:])], dim=1)
         outs = torch.cat([outs_a * outs_b, outs_a + outs_b], dim=1)
         return self.out_activation(self.convout(outs))
+
+
+class AEBlock(nn.Module):
+    def __init__(self,
+                 enc_depth: int,
+                 dec_depth: int,
+                 in_ch: int, filters: int,
+                 kernel_size: int | Tuple[int, int]):
+        super(AEBlock, self).__init__()
+        self.enc_depth = enc_depth
+        self.dec_depth = dec_depth
+        self.enc_ls = nn.ModuleList()
+        self.dec_ls = nn.ModuleList()
+        self.adapter = nn.ModuleList()
+
+        for i in range(enc_depth):
+            if i == 0:
+                self.enc_ls.append(nn.Conv2d(in_channels=in_ch, out_channels=filters,
+                                             kernel_size=kernel_size, stride=1, padding=0, bias=True))
+            else:
+                self.enc_ls.append(nn.Conv2d(in_channels=filters, out_channels=filters,
+                                             kernel_size=kernel_size, stride=1, padding=0, bias=True))
+            self.adapter.append(nn.Conv2d(in_channels=filters, out_channels=filters, kernel_size=1,
+                                          stride=1, padding=0, bias=True))
+        for i in range(dec_depth):
+            if i == enc_depth - 1:
+                self.dec_ls.append(nn.ConvTranspose2d(in_channels=filters, out_channels=in_ch,
+                                                          kernel_size=kernel_size, stride=1, padding=0, bias=True))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        encodes_skip = []
+        for encoder in self.enc_ls:
+            x = encoder(x)
+            encodes_skip.append(x)
+        for decoder, skip_feat, adapter in zip(self.dec_ls, encodes_skip[::-1], self.adapter):
+            x = decoder(x)
+            x = x * torch.sigmoid(adapter(skip_feat))
+        return x
 
 
 class UpDownBlock(nn.Module):
