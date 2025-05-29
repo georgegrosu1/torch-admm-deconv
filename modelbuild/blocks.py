@@ -131,10 +131,7 @@ class DivergentAttention(nn.Module):
         default_init_weights(self.convout)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.admms is not None:
-            outs = [conv(x) for conv in self.convs]
-        else:
-            outs = [conv(x) for conv in self.convs]
+        outs = [conv(x) for conv in self.convs]
         outs_a = torch.cat(tensors=[attention(feat) + feat for attention, feat in
                                     zip(self.attentions[:len(self.attentions) // 2], outs[:len(outs) // 2])], dim=1)
         outs_b = torch.cat(tensors=[attention(feat) + feat for attention, feat in
@@ -155,29 +152,27 @@ class AEBlock(nn.Module):
         self.enc_ls = nn.ModuleList()
         self.dec_ls = nn.ModuleList()
         self.adapter = nn.ModuleList()
+        self.intro = nn.Conv2d(in_channels=in_ch, out_channels=filters, kernel_size=1, stride=1, padding=0)
 
         for i in range(enc_depth):
-            if i == 0:
-                self.enc_ls.append(nn.Conv2d(in_channels=in_ch, out_channels=filters,
-                                             kernel_size=kernel_size, stride=1, padding=0, bias=True))
-            else:
-                self.enc_ls.append(nn.Conv2d(in_channels=filters, out_channels=filters,
-                                             kernel_size=kernel_size, stride=1, padding=0, bias=True))
+            self.enc_ls.append(nn.Conv2d(in_channels=filters, out_channels=filters,
+                                         kernel_size=kernel_size, stride=1, padding=0))
             self.adapter.append(nn.Conv2d(in_channels=filters, out_channels=filters, kernel_size=1,
                                           stride=1, padding=0, bias=True))
         for i in range(dec_depth):
-            if i == enc_depth - 1:
-                self.dec_ls.append(nn.ConvTranspose2d(in_channels=filters, out_channels=in_ch,
-                                                          kernel_size=kernel_size, stride=1, padding=0, bias=True))
+            self.dec_ls.append(nn.ConvTranspose2d(in_channels=filters, out_channels=filters,
+                                                  kernel_size=kernel_size, stride=1, padding=0))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        encodes_skip = []
-        for encoder in self.enc_ls:
+        x = self.intro(x)
+        encodes_skip = [x]
+        for idx, encoder in enumerate(self.enc_ls):
             x = encoder(x)
-            encodes_skip.append(x)
+            if idx < len(self.enc_ls) - 1:
+                encodes_skip.append(x)
         for decoder, skip_feat, adapter in zip(self.dec_ls, encodes_skip[::-1], self.adapter):
             x = decoder(x)
-            x = x * torch.sigmoid(adapter(skip_feat))
+            x = x * torch.relu(adapter(skip_feat))
         return x
 
 

@@ -24,35 +24,34 @@ class DivergentRestorer(nn.Module):
                                          stride=1, padding=0, bias=False)
         else:
             self.admm_fusion = None
-        self.branches = branches
+        self._level_branches = branches
         self.blocks = nn.ModuleList()
         num_levels = len(branches)
         for i in range(num_levels):
             if i == 0:
                 self.blocks.append(DivergentAttention(branches=self._level_branches[i],
-                                                      in_channels=in_channels if admms is None else in_channels * len(admms),
+                                                      in_channels=in_channels,
                                                       out_channels=filters,
                                                       conv_filters=filters,
-                                                      enc_depth=1, dec_depth=1, ae_filters=filters//2, ae_kern_size=3,
+                                                      enc_depth=4, dec_depth=4, ae_filters=filters, ae_kern_size=3,
                                                       gate_channels=gate_channels,
                                                       attention_reduction=attention_reduction,
-                                                      out_activation=intermediate_activation,
-                                                      use_varmap=True))
+                                                      out_activation=intermediate_activation))
             elif i == num_levels - 1:
                 self.blocks.append(DivergentAttention(branches=self._level_branches[i],
-                                                      in_channels=filters + 3,
+                                                      in_channels=filters,
                                                       out_channels=final_channels,
                                                       conv_filters=filters,
-                                                      enc_depth=4, dec_depth=4, ae_filters=filters // 2, ae_kern_size=3,
+                                                      enc_depth=4, dec_depth=4, ae_filters=filters, ae_kern_size=3,
                                                       gate_channels=gate_channels,
                                                       attention_reduction=attention_reduction,
                                                       out_activation=output_activation))
             else:
                 self.blocks.append(DivergentAttention(branches=self._level_branches[i],
-                                                      in_channels=filters + 3,
+                                                      in_channels=filters,
                                                       out_channels=filters,
                                                       conv_filters=filters,
-                                                      enc_depth=3, dec_depth=3, ae_filters=filters // 2, ae_kern_size=2,
+                                                      enc_depth=10, dec_depth=10, ae_filters=filters, ae_kern_size=3,
                                                       gate_channels=gate_channels,
                                                       attention_reduction=attention_reduction,
                                                       out_activation=intermediate_activation))
@@ -66,9 +65,9 @@ class DivergentRestorer(nn.Module):
                 self.admm_blocks.append(ADMMDeconv(**admm_cfg))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.admm_blocks(x) if self.admm_blocks is not None else x
-        x = self.admm_fusion if self.admm_fusion is not None else x
+        x = torch.cat([admm(x) for admm in self.admm_blocks], dim=1) if self.admm_blocks is not None else x
+        x = self.admm_fusion(x) if self.admm_fusion is not None else x
         out = self.blocks[0](x)
         for i in range(1, len(self.blocks)):
-            out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
+            out = self.blocks[i](out)
         return x * out
