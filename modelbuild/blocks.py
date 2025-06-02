@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
 from typing import Tuple, List
+import torch.nn.functional as F
 
 from elayers.admmdeconv import ADMMDeconv
-from elayers.attentions import CBAM
+from elayers.attentions import CBAM, ChannelGate
 
 
 def compute_residual_dec_input_channels(enc_out_channels: List[int], dec_out_channels: List[int]) -> List[int]:
@@ -104,27 +105,26 @@ class DivergentAttention(nn.Module):
                  in_channels: int,
                  out_channels: int,
                  conv_filters: int,
-                 enc_depth:int, dec_depth:int, ae_filters: int, ae_kern_size: int,
+                 enc_depth:int, dec_depth:int, ae_filters: int,
                  gate_channels: int,
                  attention_reduction: int,
-                 out_activation: nn.Module = None,
-                 use_varmap: bool = False):
+                 out_activation: nn.Module = None):
         super(DivergentAttention, self).__init__()
 
         self._pool_types = [('avg', 'max'), ('lp', 'lse')]
         self.out_activation = out_activation if out_activation is not None else nn.Identity()
         self.convs = nn.ModuleList()
         self.attentions = nn.ModuleList()
-        self.convout = nn.Conv2d(in_channels=conv_filters*branches, out_channels=out_channels,
+        self.convout = nn.Conv2d(in_channels=ae_filters*branches, out_channels=out_channels,
                                  kernel_size=1, stride=1, padding=0, bias=True)
         for i in range(branches):
             # self.convs.append(nn.Conv2d(in_channels=in_channels, out_channels=conv_filters, kernel_size=1, stride=1,
             #                             padding=0, bias=True))
-            self.convs.append(AEBlock(enc_depth, dec_depth, in_channels, ae_filters, ae_kern_size))
+            self.convs.append(AEBlock(enc_depth, dec_depth, in_channels, ae_filters, gate_channels, attention_reduction))
             # self.convs.append(UpDownBlock(up_in_ch=in_channels, up_out_ch=in_channels, down_out_ch=conv_filters,
             #                               kernel_size=3))
             self.attentions.append(CBAM(gate_channels=gate_channels, reduction_ratio=attention_reduction,
-                                        pool_types=self._pool_types[i%2], use_spatial=True, use_varmap=use_varmap))
+                                        pool_types=self._pool_types[i%2], use_spatial=True))
 
         for conv in self.convs:
             default_init_weights(conv)
@@ -140,39 +140,114 @@ class DivergentAttention(nn.Module):
         return self.out_activation(self.convout(outs))
 
 
+class DoubleConv(nn.Module):
+    """(convolution => [BN] => ReLU) * 2"""
+
+    def __init__(self, in_channels, out_channels, mid_channels=None):
+        super().__init__()
+        if not mid_channels:
+            mid_channels = out_channels
+        self.double_conv = nn.Sequential(
+            nn.Conv2d(in_channels, mid_channels, kernel_size=3, padding=1, bias=False),
+            nn.InstanceNorm2d(mid_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(mid_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            nn.InstanceNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.double_conv(x)
+
+
+class EncoderBlock(nn.Module):
+    """Downscaling with maxpool then double conv"""
+
+    def __init__(self, in_channels: int, out_channels: int):
+        super().__init__()
+        self.maxpool_conv = nn.Sequential(
+            nn.MaxPool2d(2),
+            DoubleConv(in_channels, out_channels)
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.maxpool_conv(x)
+
+
+class DecoderBlock(nn.Module):
+    """Upscaling then double conv"""
+
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.up = nn.ConvTranspose2d(in_channels, in_channels // 2, kernel_size=2, stride=2)
+        self.conv = DoubleConv(in_channels, out_channels)
+
+    def forward(self, x1: torch.Tensor, x2: torch.Tensor) -> torch.Tensor:
+        x1 = self.up(x1)
+        # input is CHW
+        diffY = x2.size()[2] - x1.size()[2]
+        diffX = x2.size()[3] - x1.size()[3]
+
+        x1 = F.pad(x1, [diffX // 2, diffX - diffX // 2,
+                        diffY // 2, diffY - diffY // 2])
+        # if you have padding issues, see
+        # https://github.com/HaiyongJiang/U-Net-Pytorch-Unstructured-Buggy/commit/0e854509c2cea854e247a9c615f175f76fbb2e3a
+        # https://github.com/xiaopeng-liao/Pytorch-UNet/commit/8ebac70e633bac59fc22bb5195e513d5832fb3bd
+        x = torch.cat([x2, x1], dim=1)
+        return self.conv(x)
+
+
 class AEBlock(nn.Module):
     def __init__(self,
                  enc_depth: int,
                  dec_depth: int,
                  in_ch: int, filters: int,
-                 kernel_size: int | Tuple[int, int]):
+                 gate_channels: int, attention_reduction: int):
         super(AEBlock, self).__init__()
+        self._pool_types = [
+            ('avg', 'lp'), ('lp', 'lse'), ('max', 'lse'),
+            ('max', 'lp'), ('avg', 'lse'), ('avg', 'max')
+        ]
         self.enc_depth = enc_depth
         self.dec_depth = dec_depth
-        self.enc_ls = nn.ModuleList()
-        self.dec_ls = nn.ModuleList()
-        self.adapter = nn.ModuleList()
+        self.filters = filters
+        self.gate_channels = gate_channels
+        self.attention_reduction = attention_reduction
         self.intro = nn.Conv2d(in_channels=in_ch, out_channels=filters, kernel_size=1, stride=1, padding=0)
+        self._init_encoder_blocks(filters, filters)
+        self._init_decoder_blocks(filters, filters)
 
-        for i in range(enc_depth):
-            self.enc_ls.append(nn.Conv2d(in_channels=filters, out_channels=filters,
-                                         kernel_size=kernel_size, stride=1, padding=0))
-            self.adapter.append(nn.Conv2d(in_channels=filters, out_channels=filters, kernel_size=1,
-                                          stride=1, padding=0, bias=True))
-        for i in range(dec_depth):
-            self.dec_ls.append(nn.ConvTranspose2d(in_channels=filters, out_channels=filters,
-                                                  kernel_size=kernel_size, stride=1, padding=0))
+    def _init_encoder_blocks(self,
+                             in_channels: int,
+                             filters: int):
+        self.enc_blocks = nn.ModuleList()
+        for _ in range(self.enc_depth):
+            self.enc_blocks.append(EncoderBlock(in_channels, filters))
+
+    def _init_decoder_blocks(self,
+                             in_channels: int,
+                             filters: int):
+        self.dec_blocks = nn.ModuleList()
+        for _ in range(self.dec_depth):
+            self.dec_blocks.append(DecoderBlock(in_channels, filters))
+
+    def _init_attention_blocks(self,):
+        self.attention_blocks = nn.ModuleList()
+        for i in range(self.enc_depth - 1):
+            self.attention_blocks.append(CBAM(gate_channels=self.gate_channels,
+                                              reduction_ratio=self.attention_reduction,
+                                              pool_types=self._pool_types[i % 6],
+                                              use_spatial=True))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.intro(x)
-        encodes_skip = [x]
-        for idx, encoder in enumerate(self.enc_ls):
-            x = encoder(x)
-            if idx < len(self.enc_ls) - 1:
-                encodes_skip.append(x)
-        for decoder, skip_feat, adapter in zip(self.dec_ls, encodes_skip[::-1], self.adapter):
-            x = decoder(x)
-            x = x * torch.relu(adapter(skip_feat))
+        encodes = [x]
+        for i in range(self.enc_depth):
+            x = self.enc_blocks[i](x)
+            if i < self.enc_depth - 1:
+                encodes.append(x)
+        for encoder, attention, skip in zip(self.dec_blocks, self.attention_blocks, encodes[::-1]):
+            x = encoder(x, attention(skip))
         return x
 
 
@@ -288,3 +363,49 @@ def default_init_weights(nn_modules: nn.Module | list[nn.Module]):
             nn.init.xavier_normal_(nn_module.weight)
             if nn_module.bias is not None:
                 nn_module.bias.data.fill_(0)
+
+
+class TopNChannelPooling(nn.Module):
+    """
+    A PyTorch layer that selects the top N ranked channel values for each pixel,
+    without performing any further pooling operation on these N values.
+
+    For each pixel (h, w), this layer takes the feature vector along the channel dimension,
+    sorts its values, and directly outputs the top N values.
+
+    Args:
+        n_channels_to_select (int): The number of top-ranked channels to select.
+                                    Must be less than or equal to the input number of channels.
+    """
+    def __init__(self, n_channels_to_select: int):
+        super().__init__()
+        if not isinstance(n_channels_to_select, int) or n_channels_to_select <= 0:
+            raise ValueError("n_channels_to_select must be a positive integer.")
+        self.n_channels_to_select = n_channels_to_select
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x (torch.Tensor): Input tensor of shape (B, C, H, W).
+
+        Returns:
+            torch.Tensor: Output tensor containing the top N channel values for each pixel.
+                          Shape will be (B, n_channels_to_select, H, W).
+        """
+        B, C, H, W = x.shape
+
+        if self.n_channels_to_select > C:
+            raise ValueError(f"n_channels_to_select ({self.n_channels_to_select}) "
+                             f"cannot be greater than the number of input channels ({C}).")
+
+        # Reshape to (B * H * W, C) for easier sorting along the channel dimension
+        x_reshaped = x.permute(0, 2, 3, 1).reshape(-1, C)
+
+        # Get the top N values for each pixel (row) along the channel dimension
+        # top_n_values will have shape (B * H * W, n_channels_to_select)
+        top_n_values, _ = torch.topk(x_reshaped, k=self.n_channels_to_select, dim=-1, largest=True, sorted=True)
+
+        # Reshape back to (B, n_channels_to_select, H, W)
+        output = top_n_values.reshape(B, H, W, self.n_channels_to_select).permute(0, 3, 1, 2)
+
+        return output

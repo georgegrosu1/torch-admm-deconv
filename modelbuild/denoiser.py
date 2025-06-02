@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from elayers.admmdeconv import ADMMDeconv
-from modelbuild.blocks import DivergentAttention
+from modelbuild.blocks import DivergentAttention, TopNChannelPooling
 
 
 class DivergentRestorer(nn.Module):
@@ -20,10 +20,9 @@ class DivergentRestorer(nn.Module):
 
         self._init_admms(admms)
         if self.admm_blocks is not None:
-            self.admm_fusion = nn.Conv2d(in_channels=in_channels * len(admms), out_channels=in_channels, kernel_size=1,
-                                         stride=1, padding=0, bias=False)
+            self.channel_pooling = TopNChannelPooling(in_channels)
         else:
-            self.admm_fusion = None
+            self.channel_pooling = None
         self._level_branches = branches
         self.blocks = nn.ModuleList()
         num_levels = len(branches)
@@ -33,7 +32,7 @@ class DivergentRestorer(nn.Module):
                                                       in_channels=in_channels,
                                                       out_channels=filters,
                                                       conv_filters=filters,
-                                                      enc_depth=4, dec_depth=4, ae_filters=filters, ae_kern_size=3,
+                                                      enc_depth=4, dec_depth=4, ae_filters=filters,
                                                       gate_channels=gate_channels,
                                                       attention_reduction=attention_reduction,
                                                       out_activation=intermediate_activation))
@@ -42,7 +41,7 @@ class DivergentRestorer(nn.Module):
                                                       in_channels=filters,
                                                       out_channels=final_channels,
                                                       conv_filters=filters,
-                                                      enc_depth=4, dec_depth=4, ae_filters=filters, ae_kern_size=3,
+                                                      enc_depth=4, dec_depth=4, ae_filters=filters,
                                                       gate_channels=gate_channels,
                                                       attention_reduction=attention_reduction,
                                                       out_activation=output_activation))
@@ -51,7 +50,7 @@ class DivergentRestorer(nn.Module):
                                                       in_channels=filters,
                                                       out_channels=filters,
                                                       conv_filters=filters,
-                                                      enc_depth=10, dec_depth=10, ae_filters=filters, ae_kern_size=3,
+                                                      enc_depth=4, dec_depth=4, ae_filters=filters,
                                                       gate_channels=gate_channels,
                                                       attention_reduction=attention_reduction,
                                                       out_activation=intermediate_activation))
@@ -66,7 +65,7 @@ class DivergentRestorer(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = torch.cat([admm(x) for admm in self.admm_blocks], dim=1) if self.admm_blocks is not None else x
-        x = self.admm_fusion(x) if self.admm_fusion is not None else x
+        x = self.channel_pooling(x) if self.channel_pooling is not None else x
         out = self.blocks[0](x)
         for i in range(1, len(self.blocks)):
             out = self.blocks[i](out)
