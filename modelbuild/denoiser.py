@@ -50,7 +50,8 @@ class DivergentRestorer(nn.Module):
                                                       gate_channels=gate_channels,
                                                       attention_reduction=attention_reduction,
                                                       out_activation=intermediate_activation))
-                self.top_ch.append(TopNChannelPooling(filters, gate_channels * 2, attention_reduction))
+                self.top_ch.append(TopNChannelPooling(filters, gate_channels * 2, attention_reduction,
+                                                      conv_filters=gate_channels * 4))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.blocks[0](x)
@@ -58,7 +59,7 @@ class DivergentRestorer(nn.Module):
             if i < len(self.blocks) - 1:
                 skip = out
                 out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
-                out = self.top_ch[i](torch.cat(tensors=[skip, out], dim=1))
+                out = self.top_ch[i-1](torch.cat(tensors=[skip, out], dim=1))
             else:
                 out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
         return out

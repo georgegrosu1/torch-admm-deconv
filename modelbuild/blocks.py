@@ -108,15 +108,26 @@ class TopNChannelPooling(nn.Module):
         n_channels_to_select (int): The number of top-ranked channels to select.
                                     Must be less than or equal to the input number of channels.
     """
-    def __init__(self, n_channels_to_select: int,
+    def __init__(self,
+                 n_channels_to_select: int,
                  gate_channels: int=None,
                  attention_reduction: int=None,
                  pool_types: tuple=('avg', 'max'),
-                 use_spatial: bool=True):
+                 use_spatial: bool=True,
+                 conv_filters: int=None):
         super().__init__()
         if not isinstance(n_channels_to_select, int) or n_channels_to_select <= 0:
             raise ValueError("n_channels_to_select must be a positive integer.")
         self.n_channels_to_select = n_channels_to_select
+
+        if conv_filters is not None:
+            self.conv_exp = nn.Conv2d(gate_channels, conv_filters, 1, 1, bias=True)
+            self.acti = nn.GELU()
+            gate_channels = conv_filters
+        else:
+            self.conv_exp = None
+            self.acti = None
+
         if gate_channels is not None and attention_reduction is not None:
             self.cbam = CBAM(gate_channels=gate_channels, reduction_ratio=attention_reduction,
                              pool_types=pool_types, use_spatial=use_spatial)
@@ -131,6 +142,7 @@ class TopNChannelPooling(nn.Module):
             torch.Tensor: Output tensor containing the top N channel values for each pixel.
                           Shape will be (B, n_channels_to_select, H, W).
         """
+        x = self.acti(self.conv_exp(x)) if self.conv_exp is not None else x
         x = self.cbam(x) if self.cbam is not None else x
         B, C, H, W = x.shape
         if self.n_channels_to_select > C:

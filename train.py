@@ -82,14 +82,13 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     else:
         entry_model = None
 
-    # model = DivergentRestorer(3, 2, 3,
-    #                           3, 4, 86,
-    #                           86, 8,
-    #                           output_activation=torch.nn.Sigmoid(),
-    #                           frozen=entry_model, denoise=False, admms=[DECONV1, DECONV2])
+    model = DivergentRestorer(3, 2, 3,
+                              3, 4, 86,
+                              86, 8,
+                              output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
 
-    model = NAFNet(img_channel=3, width=64, middle_blk_num=12,
-                   enc_blk_nums=[2, 2, 4, 8], dec_blk_nums=[2, 2, 2, 2])
+    # model = NAFNet(img_channel=3, width=64, middle_blk_num=12,
+    #                enc_blk_nums=[2, 2, 4, 8], dec_blk_nums=[2, 2, 2, 2])
     # clipper = WeightClipper()
     # model.apply(clipper)
     model = model.to(device)
@@ -98,7 +97,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, eta_min=1e-7, T_max=400000)
 
     eval_metrics = [PSNRMetric(device), SCCMetric(device), SSIMMetric(device), MAELoss(device), UIQMetric(device)]
-    loss_func = PSNRLoss(device)
+    loss_func = SSIMLoss(device)
 
     metrics_logger = MetricsLogger(loss_func, eval_metrics)
     net_trainer = NNTrainer(loss_func, eval_metrics, net_saver, metrics_logger)
