@@ -2,8 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as torchf
 
-from elayers.varmap import ChannelwiseVariance
-
 
 def logsumexp_2d(x: torch.Tensor) -> torch.Tensor:
     tensor_flatten = x.view(x.size(0), x.size(1), -1)
@@ -62,9 +60,8 @@ class SpatialGate(nn.Module):
 
 
 class ChannelGate(nn.Module):
-    def __init__(self, gate_channels, reduction_ratio=16, pool_types=('avg', 'max'), varmap: bool = True):
+    def __init__(self, gate_channels, reduction_ratio=16, pool_types=('avg', 'max')):
         super(ChannelGate, self).__init__()
-        self.varmap = ChannelwiseVariance() if varmap else None
         self.gate_channels = gate_channels
         self.mlp = nn.Sequential(
             nn.Flatten(),
@@ -76,8 +73,6 @@ class ChannelGate(nn.Module):
 
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if self.varmap is not None:
-            x -= self.varmap(x)
         channel_att_sum, pool_out = None, None
         for pool_type in self.pool_types:
             if pool_type == 'avg':
@@ -105,10 +100,9 @@ class CBAM(nn.Module):
                  gate_channels,
                  reduction_ratio=16,
                  pool_types=('avg', 'max'),
-                 use_spatial=False,
-                 use_varmap: bool = False):
+                 use_spatial=False):
         super(CBAM, self).__init__()
-        self.channel_gate = ChannelGate(gate_channels, reduction_ratio, pool_types, use_varmap)
+        self.channel_gate = ChannelGate(gate_channels, reduction_ratio, pool_types)
         self.spatial_gate = SpatialGate() if use_spatial else None
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
