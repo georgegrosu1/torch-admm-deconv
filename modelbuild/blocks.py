@@ -112,7 +112,7 @@ class TopNChannelPooling(nn.Module):
                  n_channels_to_select: int,
                  gate_channels: int=None,
                  attention_reduction: int=None,
-                 pool_types: tuple=('avg', 'max'),
+                 pool_types: tuple=('avg', 'lp'),
                  use_spatial: bool=True,
                  conv_filters: int=None):
         super().__init__()
@@ -152,7 +152,7 @@ class TopNChannelPooling(nn.Module):
         # Get the top N values for each pixel (row) along the channel dimension
         # top_n_values will have shape (B * H * W, n_channels_to_select)
         x, _ = torch.topk(x.permute(0, 2, 3, 1).reshape(-1, C),
-                                     k=self.n_channels_to_select, dim=-1, largest=True, sorted=True)
+                                     k=self.n_channels_to_select, dim=-1, largest=True, sorted=False)
         # Reshape back to (B, n_channels_to_select, H, W)
         return x.reshape(B, H, W, self.n_channels_to_select).permute(0, 3, 1, 2).contiguous()
 

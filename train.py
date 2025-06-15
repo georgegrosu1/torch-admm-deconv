@@ -62,8 +62,8 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
                               transforms=transforms)
     eval_dset = ImageDataset(Path(train_cfg['eval']['x_path']), Path(train_cfg['eval']['y_path']), device=device,
                              transforms=transforms)
-    train_loader = torch.utils.data.DataLoader(train_dset, shuffle=True, batch_size=train_cfg['batch_size'])
-    eval_loader = torch.utils.data.DataLoader(eval_dset, shuffle=True, batch_size=train_cfg['batch_size'])
+    train_loader = torch.utils.data.DataLoader(train_dset, shuffle=True, batch_size=train_cfg['train']['batch_size'])
+    eval_loader = torch.utils.data.DataLoader(eval_dset, shuffle=True, batch_size=train_cfg['eval']['batch_size'])
 
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
