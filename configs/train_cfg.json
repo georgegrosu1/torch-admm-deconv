@@ -1,15 +1,16 @@
 {
   "train": {
     "ckpt": null,
-    "x_path": "C:/Users/40774/Dev/datasets/GoPro/orig_blur/awgn-0-0/train/y",
-    "y_path": "C:/Users/40774/Dev/datasets/GoPro/orig_blur/awgn-0-0/train/y"
+    "x_path": "C:/Users/40774/Dev/datasets/RENOIR/orig/train/y",
+    "y_path": "C:/Users/40774/Dev/datasets/RENOIR/orig/train/y",
+    "batch_size": 2
   },
   "eval": {
-    "x_path": "C:/Users/40774/Dev/datasets/GoPro/orig_blur/awgn-0-0/test/y",
-    "y_path": "C:/Users/40774/Dev/datasets/GoPro/orig_blur/awgn-0-0/test/y"
+    "x_path": "C:/Users/40774/Dev/datasets/RENOIR/orig/test/y",
+    "y_path": "C:/Users/40774/Dev/datasets/RENOIR/orig/test/y",
+    "batch_size": 8
   },
   "im_shape": [256, 256],
-  "batch_size": 2,
   "lr": 8.8e-4,
   "epochs": 500
 }
