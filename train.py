@@ -69,8 +69,8 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     net_saver = NNSaver(save_dir_path, model_name)
 
     if train_cfg['train']['ckpt'] is not None:
-        entry_model = DivergentRestorer(3, 2, 3,
-                                        3, 4, 86,
+        entry_model = DivergentRestorer([2, 8, 32], 3,
+                                        3, 86,
                                         86, 8,
                                         output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
         checkpoint = torch.load(train_cfg['train']['ckpt'], weights_only=False, map_location=device)
@@ -82,8 +82,8 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     else:
         entry_model = None
 
-    model = DivergentRestorer(3, 2, 3,
-                              3, 4, 86,
+    model = DivergentRestorer([2, 8, 32], 3,
+                              3, 86,
                               86, 8,
                               output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
 

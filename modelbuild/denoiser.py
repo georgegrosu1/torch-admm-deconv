@@ -5,11 +5,9 @@ from modelbuild.blocks import DivergentAttention, TopNChannelPooling
 
 class DivergentRestorer(nn.Module):
     def __init__(self,
-                 num_levels: int,
-                 init_branches: int,
+                 level_branches: list,
                  in_channels: int,
                  final_channels: int,
-                 divergence_factor: int,
                  filters: int,
                  gate_channels: int,
                  attention_reduction: int,
@@ -18,9 +16,8 @@ class DivergentRestorer(nn.Module):
                  admms: list[dict] = None):
         super(DivergentRestorer, self).__init__()
 
-        self._level_branches = [init_branches]
-        for i in range(1, num_levels):
-            self._level_branches.append(self._level_branches[-1] * divergence_factor)
+        num_levels = len(level_branches)
+        self._level_branches = level_branches
 
         self.blocks = nn.ModuleList()
         self.top_ch = nn.ModuleList()
