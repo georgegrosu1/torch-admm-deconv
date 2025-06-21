@@ -193,17 +193,20 @@ class DivergentAttention(nn.Module):
             default_init_weights(conv)
         default_init_weights(self.convout)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
         if self.admms is not None:
-            outs = [conv(admm(x)) for conv, admm in zip(self.convs, self.admms)]
+            admmouts = [admm(x) for admm in self.admms]
+            outs = [conv(admmout) for conv, admmout in zip(self.convs, admmouts)]
+            admmouts = torch.cat(admmouts, dim=1)
         else:
+            admmouts = None
             outs = [conv(x) for conv in self.convs]
         outs_a = torch.cat(tensors=[attention(feat) + feat for attention, feat in
                                     zip(self.attentions[:len(self.attentions) // 2], outs[:len(outs) // 2])], dim=1)
         outs_b = torch.cat(tensors=[attention(feat) + feat for attention, feat in
                                     zip(self.attentions[len(self.attentions) // 2:], outs[len(outs) // 2:])], dim=1)
         outs = torch.cat([outs_a * outs_b, outs_a + outs_b], dim=1)
-        return self.out_activation(self.convout(outs))
+        return self.out_activation(self.convout(outs)), admmouts
 
 
 class UpDownBlock(nn.Module):
