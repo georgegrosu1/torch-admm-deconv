@@ -98,6 +98,65 @@ def conv2d_pooling_output_shape(
     return out_height, out_width
 
 
+class TopNChannelPooling(nn.Module):
+    """
+    A PyTorch layer that selects the top N ranked channel values for each pixel,
+    without performing any further pooling operation on these N values.
+    For each pixel (h, w), this layer takes the feature vector along the channel dimension,
+    sorts its values, and directly outputs the top N values.
+    Args:
+        n_channels_to_select (int): The number of top-ranked channels to select.
+                                    Must be less than or equal to the input number of channels.
+    """
+    def __init__(self,
+                 n_channels_to_select: int,
+                 gate_channels: int=None,
+                 attention_reduction: int=None,
+                 pool_types: tuple=('avg', 'lp'),
+                 use_spatial: bool=True,
+                 conv_filters: int=None):
+        super().__init__()
+        if not isinstance(n_channels_to_select, int) or n_channels_to_select <= 0:
+            raise ValueError("n_channels_to_select must be a positive integer.")
+        self.n_channels_to_select = n_channels_to_select
+
+        if conv_filters is not None:
+            self.conv_exp = nn.Conv2d(gate_channels, conv_filters, 1, 1, bias=True)
+            self.acti = nn.GELU()
+            gate_channels = conv_filters
+        else:
+            self.conv_exp = None
+            self.acti = None
+
+        if gate_channels is not None and attention_reduction is not None:
+            self.cbam = CBAM(gate_channels=gate_channels, reduction_ratio=attention_reduction,
+                             pool_types=pool_types, use_spatial=use_spatial)
+        else:
+            self.cbam = None
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            x (torch.Tensor): Input tensor of shape (B, C, H, W).
+        Returns:
+            torch.Tensor: Output tensor containing the top N channel values for each pixel.
+                          Shape will be (B, n_channels_to_select, H, W).
+        """
+        x = self.acti(self.conv_exp(x)) if self.conv_exp is not None else x
+        x = self.cbam(x) if self.cbam is not None else x
+        B, C, H, W = x.shape
+        if self.n_channels_to_select > C:
+            raise ValueError(f"n_channels_to_select ({self.n_channels_to_select}) "
+                             f"cannot be greater than the number of input channels ({C}).")
+        # Reshape to (B * H * W, C) for easier sorting along the channel dimension
+        # Get the top N values for each pixel (row) along the channel dimension
+        # top_n_values will have shape (B * H * W, n_channels_to_select)
+        x, _ = torch.topk(x.permute(0, 2, 3, 1).reshape(-1, C),
+                                     k=self.n_channels_to_select, dim=-1, largest=True, sorted=False)
+        # Reshape back to (B, n_channels_to_select, H, W)
+        return x.reshape(B, H, W, self.n_channels_to_select).permute(0, 3, 1, 2).contiguous()
+
+
 class DivergentAttention(nn.Module):
     def __init__(self,
                  branches: int,
@@ -107,8 +166,7 @@ class DivergentAttention(nn.Module):
                  gate_channels: int,
                  attention_reduction: int,
                  out_activation: nn.Module = None,
-                 admms: list[dict] = None,
-                 use_varmap: bool = False):
+                 admms: list[dict] = None):
         super(DivergentAttention, self).__init__()
 
         if admms is not None:
@@ -127,7 +185,7 @@ class DivergentAttention(nn.Module):
             self.convs.append(UpDownBlock(up_in_ch=in_channels, up_out_ch=in_channels, down_out_ch=conv_filters,
                                           kernel_size=3))
             self.attentions.append(CBAM(gate_channels=gate_channels, reduction_ratio=attention_reduction,
-                                        pool_types=self._pool_types[i%2], use_spatial=True, use_varmap=use_varmap))
+                                        pool_types=self._pool_types[i%2], use_spatial=True))
             if admms is not None:
                 self.admms.append(ADMMDeconv(**admms[i]))
 
@@ -135,7 +193,7 @@ class DivergentAttention(nn.Module):
             default_init_weights(conv)
         default_init_weights(self.convout)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
         if self.admms is not None:
             outs = [conv(admm(x)) for conv, admm in zip(self.convs, self.admms)]
         else:

@@ -16,7 +16,6 @@ Simple Baselines for Image Restoration
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from elayers.admmdeconv import ADMMDeconv
 
 
 class AvgPool2d(nn.Module):
@@ -223,13 +222,6 @@ class NAFBlock(nn.Module):
         return y + x * self.gamma
 
 
-DECONV1 = {'kern_size': (),
-         'max_iters': 50,
-         'iso': True}
-DECONV2 = {'kern_size': (),
-         'max_iters': 50,
-         'iso': True}
-
 class NAFNet(nn.Module):
 
     def __init__(self, img_channel=3, width=16, middle_blk_num=1, enc_blk_nums=[], dec_blk_nums=[]):
@@ -242,7 +234,6 @@ class NAFNet(nn.Module):
                                 groups=1,
                                 bias=True)
 
-        self.admms = nn.ModuleList()
         self.encoders = nn.ModuleList()
         self.decoders = nn.ModuleList()
         self.middle_blks = nn.ModuleList()
@@ -250,10 +241,6 @@ class NAFNet(nn.Module):
         self.downs = nn.ModuleList()
 
         chan = width
-        admms = [DECONV1, DECONV2]
-        for admmconf in admms:
-            self.admms.append(ADMMDeconv(**admmconf))
-        self.admm_fuse = nn.Conv2d(in_channels=3*len(admms), out_channels=img_channel, kernel_size=1, padding=0, stride=1)
         for num in enc_blk_nums:
             self.encoders.append(
                 nn.Sequential(
@@ -290,9 +277,7 @@ class NAFNet(nn.Module):
         B, C, H, W = inp.shape
         inp = self.check_image_size(inp)
 
-        x_l = torch.cat([admm(inp) for admm in self.admms], dim=1)
-        x_l = self.admm_fuse(x_l)
-        x = self.intro(x_l)
+        x = self.intro(inp)
 
         encs = []
 
