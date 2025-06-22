@@ -21,7 +21,6 @@ class DivergentRestorer(nn.Module):
 
         self.blocks = nn.ModuleList()
         self.top_ch = nn.ModuleList()
-        additional_chs = len(admms) if admms is not None else 0
         for i in range(num_levels):
             if i == 0:
                 self.blocks.append(DivergentAttention(branches=self._level_branches[i],
@@ -34,7 +33,7 @@ class DivergentRestorer(nn.Module):
                                                       admms=admms))
             elif i == num_levels - 1:
                 self.blocks.append(DivergentAttention(branches=self._level_branches[i],
-                                                      in_channels=filters + additional_chs,
+                                                      in_channels=filters + 3,
                                                       out_channels=final_channels,
                                                       conv_filters=filters,
                                                       gate_channels=gate_channels,
@@ -42,7 +41,7 @@ class DivergentRestorer(nn.Module):
                                                       out_activation=output_activation))
             else:
                 self.blocks.append(DivergentAttention(branches=self._level_branches[i],
-                                                      in_channels=filters + additional_chs,
+                                                      in_channels=filters + 3,
                                                       out_channels=filters,
                                                       conv_filters=filters,
                                                       gate_channels=gate_channels,
@@ -52,12 +51,12 @@ class DivergentRestorer(nn.Module):
                                                       conv_filters=gate_channels * 4))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out, admmouts = self.blocks[0](x)
+        out = self.blocks[0](x)
         for i in range(1, len(self.blocks)):
             if i < len(self.blocks) - 1:
                 skip = out
-                out, _ = self.blocks[i](torch.cat(tensors=[out, admmouts], dim=1))
-                out, _ = self.top_ch[i-1](torch.cat(tensors=[skip, out], dim=1))
+                out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
+                out = self.top_ch[i-1](torch.cat(tensors=[skip, out], dim=1))
             else:
-                out, _ = self.blocks[i](torch.cat(tensors=[out, admmouts], dim=1))
+                out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
         return out
