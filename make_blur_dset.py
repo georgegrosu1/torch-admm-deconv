@@ -3,6 +3,7 @@ from tqdm import tqdm
 from pathlib import Path
 from scipy.io import loadmat
 from enum import Enum
+import rawpy
 
 from utils.dset_utils import *
 
@@ -13,6 +14,7 @@ class Dset(Enum):
     REALBLUR = 'realblur'
     SIDD = 'sidd'
     RENOIR = 'renoir'
+    RNIND = 'rnind'
 
 
 def get_train_test_txts(orig_p: Path) -> Tuple[List, List]:
@@ -192,14 +194,40 @@ def make_renoir_dset(orig: str,
     _write_set(test_s, save_dir_test)
 
 
+def make_rnind_train_set(orig: str,
+                         save_dir_train: Path) -> None:
+
+    def _get_rnind_gt_ims(rnind_path: Path) -> list[Path]:
+        gt_ims = [im for im in rnind_path.glob('*') if '_GT_' in im.name]
+
+        gts_dict = {}
+        for gt in gt_ims:
+            im_id = gt.stem.split('_GT_')[0]
+            if im_id not in gts_dict:
+                gts_dict[im_id] = {}
+                gts_dict[im_id] = gt
+        return list(gts_dict.values())
+
+    def _write_rnind(set_ims, save_set_dir):
+        for img in tqdm(set_ims):
+            with rawpy.imread(str(img)) as raw:
+                arr_im = raw.postprocess()
+                save_p = save_set_dir / f'{img.stem}.png'
+                arr_im = cv2.cvtColor(arr_im, cv2.COLOR_BGR2RGB)
+                cv2.imwrite(save_p, arr_im)
+
+    train_ims = _get_rnind_gt_ims(Path(orig))
+    _write_rnind(train_ims, save_dir_train)
+
+
 def main():
     args_parser = argparse.ArgumentParser(description='Script to generate dataset with noise and blur')
     args_parser.add_argument('--dset', '-d', type=str, help='Dataset',
-                             default=r'renoir')
+                             default=r'rnind')
     args_parser.add_argument('--orig', '-o', type=str, help='Path to orig dset dir',
-                             default=r'D:/Projects/datasets/RENOIR')
+                             default=r'D:/Projects/datasets/RNIND')
     args_parser.add_argument('--save_dir', '-s', type=str, help='Dir (relative to cwd) to save images',
-                             default=r'D:/Projects/datasets/RENOIR/orig')
+                             default=r'D:/Projects/datasets/rnind_bsd')
     args_parser.add_argument('--min_noise_std', '-m', type=int, help='Minimum std of noise level',
                              default=15)
     args_parser.add_argument('--max_noise_std', '-M', type=int, help='Maximum std of noise level',
@@ -230,6 +258,8 @@ def main():
                        args.min_noise_std, args.max_noise_std)
     elif args.dset == Dset.RENOIR.value:
         make_renoir_dset(args.orig, save_dir_train_y, save_dir_test_y)
+    elif args.dset == Dset.RNIND.value:
+        make_rnind_train_set(args.orig, save_dir_train_y)
     else:
         raise NotImplementedError
 
