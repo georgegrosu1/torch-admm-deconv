@@ -255,7 +255,6 @@ class UpDownBlock(nn.Module):
                  normalization: nn.Module = None,
                  pool_size: int = 0):
         super(UpDownBlock, self).__init__()
-        self.norm = LayerNorm2d(up_in_ch)
         self.up_block = UpBlock(up_in_ch, up_out_ch, kernel_size, normalization, activation, pool_size)
         self.down_block = DownBlock(up_out_ch, down_out_ch, kernel_size, normalization, activation, pool_size)
         self.chc = nn.Conv2d(in_channels=up_out_ch, out_channels=up_out_ch, kernel_size=1, stride=1,
@@ -264,7 +263,6 @@ class UpDownBlock(nn.Module):
                              padding=0, bias=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.norm(x)
         x = self.up_block(x)
         x = self.chc(x)
         x = self.down_block(x)
