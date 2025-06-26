@@ -98,6 +98,46 @@ def conv2d_pooling_output_shape(
     return out_height, out_width
 
 
+class LayerNormFunction(torch.autograd.Function):
+
+    @staticmethod
+    def forward(ctx, x, weight, bias, eps):
+        ctx.eps = eps
+        N, C, H, W = x.size()
+        mu = x.mean(1, keepdim=True)
+        var = (x - mu).pow(2).mean(1, keepdim=True)
+        y = (x - mu) / (var + eps).sqrt()
+        ctx.save_for_backward(y, var, weight)
+        y = weight.view(1, C, 1, 1) * y + bias.view(1, C, 1, 1)
+        return y
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        eps = ctx.eps
+
+        N, C, H, W = grad_output.size()
+        y, var, weight = ctx.saved_variables
+        g = grad_output * weight.view(1, C, 1, 1)
+        mean_g = g.mean(dim=1, keepdim=True)
+
+        mean_gy = (g * y).mean(dim=1, keepdim=True)
+        gx = 1. / torch.sqrt(var + eps) * (g - y * mean_gy - mean_g)
+        return gx, (grad_output * y).sum(dim=3).sum(dim=2).sum(dim=0), grad_output.sum(dim=3).sum(dim=2).sum(
+            dim=0), None
+
+
+class LayerNorm2d(nn.Module):
+
+    def __init__(self, channels, eps=1e-6):
+        super(LayerNorm2d, self).__init__()
+        self.register_parameter('weight', nn.Parameter(torch.ones(channels)))
+        self.register_parameter('bias', nn.Parameter(torch.zeros(channels)))
+        self.eps = eps
+
+    def forward(self, x):
+        return LayerNormFunction.apply(x, self.weight, self.bias, self.eps)
+
+
 class TopNChannelPooling(nn.Module):
     """
     A PyTorch layer that selects the top N ranked channel values for each pixel,
@@ -215,6 +255,7 @@ class UpDownBlock(nn.Module):
                  normalization: nn.Module = None,
                  pool_size: int = 0):
         super(UpDownBlock, self).__init__()
+        self.norm = LayerNorm2d(up_in_ch)
         self.up_block = UpBlock(up_in_ch, up_out_ch, kernel_size, normalization, activation, pool_size)
         self.down_block = DownBlock(up_out_ch, down_out_ch, kernel_size, normalization, activation, pool_size)
         self.chc = nn.Conv2d(in_channels=up_out_ch, out_channels=up_out_ch, kernel_size=1, stride=1,
@@ -223,6 +264,7 @@ class UpDownBlock(nn.Module):
                              padding=0, bias=False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.norm(x)
         x = self.up_block(x)
         x = self.chc(x)
         x = self.down_block(x)
