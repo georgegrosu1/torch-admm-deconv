@@ -268,11 +268,11 @@ class HSVLoss(Metric):
         return total_loss
 
 
-class SSIMChromaLoss(Metric):
+class SSIMHSVLoss(Metric):
     m_name = 'hybrid_ssim_hsv_loss'
 
     def __init__(self, device: str, lmbd_coeff: float = 0.7, data_range: float=1.0, kernel: int=7):
-        super(SSIMChromaLoss, self).__init__(device)
+        super(SSIMHSVLoss, self).__init__(device)
         self._ssim_func = SSIMLoss(device, data_range=data_range, kern_size=kernel)
         self._hsv_func = HSVLoss(device)
         self.lmbd_coeff = lmbd_coeff
