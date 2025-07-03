@@ -234,7 +234,7 @@ class HSVLoss(Metric):
 
         return hsv_image
 
-    def forward(self, pred_rgb, target_rgb):
+    def __call__(self, pred_rgb, target_rgb):
         """
         Computes the weighted HSV loss.
         Args:
