@@ -7,6 +7,8 @@ from torchmetrics.image import (StructuralSimilarityIndexMeasure,
                                 UniversalImageQualityIndex,
                                 SpatialCorrelationCoefficient)
 from torchmetrics.regression import MeanSquaredError
+from torchvision.transforms.functional import rgb_to_grayscale
+from kornia.color import rgb_to_lab as kornia_rgb_to_lab
 
 
 class Metric(ABC):
@@ -147,135 +149,69 @@ class PSNRLoss(Metric):
         return self.loss_weight * self.scale * torch.log(((pred - target) ** 2).mean(dim=(1, 2, 3)) + 1e-8).mean()
 
 
-class HSVLoss(Metric):
-    m_name = 'hsv_loss'
+class SSIMLabColorLoss(Metric):
+    m_name = 'color_lab_loss'
 
-    def __init__(self, device='cuda', v_weight=1.0, hs_weight=1.0, loss_fn=torch.nn.L1Loss()):
-        super(HSVLoss, self).__init__(device)
-        self.v_weight = v_weight
-        self.hs_weight = hs_weight
-        self.loss_fn = loss_fn
+    def __init__(self, device: str='cuda', ssim_weight=1.0, color_weight_ab=0.7, color_weight_l=0.3, reduction='mean'):
+        super(SSIMLabColorLoss, self).__init__(device)
+        self.ssim_weight = ssim_weight
+        self.color_weight_ab = color_weight_ab
+        self.color_weight_l = color_weight_l
+        self.l1_loss = torch.nn.L1Loss(reduction=reduction)
 
-    @staticmethod
-    def rgb_to_hsv(image_rgb: torch.Tensor) -> torch.Tensor:
-        """
-        Converts a batch of RGB images to HSV.
+        # SSIM Loss (assuming you have an SSIM implementation)
+        # For demonstration, we'll use a placeholder for SSIM.
+        # You'll need to replace this with your actual SSIM loss function.
+        # Example: from pytorch_msssim import SSIM
+        # self.ssim_loss = SSIM(data_range=1.0, size_average=True, channel=3)
+        self.ssim_loss = SSIMLoss(device=device)
 
-        Args:
-            image_rgb (torch.Tensor): Input RGB image tensor.
-                                      Shape: (..., 3, H, W) where ... is any number of batch dimensions.
-                                      Values are expected to be in the range [0, 1].
-
-        Returns:
-            torch.Tensor: HSV image tensor.
-                          Shape: (..., 3, H, W), with channels in the order H, S, V.
-                          H, S, V values are in the range [0, 1].
-        """
-        if not isinstance(image_rgb, torch.Tensor):
-            raise TypeError(f"Input must be a torch.Tensor. Got {type(image_rgb)}")
-        if image_rgb.shape[-3] != 3:
-            raise ValueError(f"Input tensor must have 3 channels in the -3 dimension. Got shape {image_rgb.shape}")
-        if image_rgb.min() < 0 or image_rgb.max() > 1:
-            # This is a common expectation for neural network inputs.
-            # You might want to normalize your image_rgb to [0, 1] before calling this function.
-            print("Warning: Input RGB values are outside the [0, 1] range. Results might be unexpected.")
-
-        # Get the original shape (excluding the channel dimension)
-        original_shape = image_rgb.shape[:-3]
-        h, w = image_rgb.shape[-2:]
-
-        # Reshape to (N, 3, H, W) for easier processing, where N is product of batch dimensions
-        # This handles any number of leading batch dimensions
-        flat_rgb = image_rgb.view(-1, 3, h, w)
-
-        # Split channels
-        r, g, b = flat_rgb[:, 0, :, :], flat_rgb[:, 1, :, :], flat_rgb[:, 2, :, :]
-
-        # Get max and min over RGB channels (Value and min_val)
-        max_rgb, _ = torch.max(flat_rgb, dim=1)  # This will be V
-        min_rgb, _ = torch.min(flat_rgb, dim=1)
-
-        delta = max_rgb - min_rgb  # Chroma
-
-        # Value (V)
-        v = max_rgb
-
-        # Saturation (S)
-        # Avoid division by zero if max_rgb is 0 (black)
-        s = torch.where(max_rgb != 0, delta / max_rgb, torch.zeros_like(delta))
-
-        # Hue (H) - initialize with zeros
-        h_channel = torch.zeros_like(delta)
-
-        # Calculate Hue based on which channel is max
-        # torch.where is crucial for differentiability here, avoiding Python if/else
-
-        # Max is Red
-        idx_r = (max_rgb == r) & (delta != 0)
-        h_channel[idx_r] = ((g[idx_r] - b[idx_r]) / delta[idx_r]) % torch.tensor([6], device=image_rgb.device)
-
-        # Max is Green
-        idx_g = (max_rgb == g) & (delta != 0)
-        h_channel[idx_g] = ((b[idx_g] - r[idx_g]) / delta[idx_g]) + torch.tensor([2], device=image_rgb.device)
-
-        # Max is Blue
-        idx_b = (max_rgb == b) & (delta != 0)
-        h_channel[idx_b] = ((r[idx_b] - g[idx_b]) / delta[idx_b]) + torch.tensor([4], device=image_rgb.device)
-
-        # Normalize H to [0, 1] by dividing by 6
-        h_channel = h_channel / torch.tensor([6.0], device=image_rgb.device)
-
-        # Stack H, S, V channels into a (N, 3, H, W) tensor
-        hsv_image = torch.stack([h_channel, s, v], dim=1)
-
-        # Reshape back to original batch dimensions
-        final_shape = original_shape + (3, h, w)
-        hsv_image = hsv_image.view(final_shape)
-
-        return hsv_image
-
-    def __call__(self, pred_rgb, target_rgb):
-        """
-        Computes the weighted HSV loss.
-        Args:
-            pred_rgb (torch.Tensor): Predicted/denoised image in RGB, shape (B, 3, H, W).
-            target_rgb (torch.Tensor): Ground truth image in RGB, shape (B, 3, H, W).
-        Returns:
-            torch.Tensor: The calculated scalar loss.
-        """
-        pred_hsv = self.rgb_to_hsv(pred_rgb)
-        target_hsv = self.rgb_to_hsv(target_rgb)
-
-        # Extract channels
-        pred_h = pred_hsv[:, 0:1, :, :]  # Hue
-        pred_s = pred_hsv[:, 1:2, :, :]  # Saturation
-        pred_v = pred_hsv[:, 2:3, :, :]  # Value
-
-        target_h = target_hsv[:, 0:1, :, :]
-        target_s = target_hsv[:, 1:2, :, :]
-        target_v = target_hsv[:, 2:3, :, :]
-
-        # Calculate loss for each component
-        loss_v = self.loss_fn(pred_v, target_v)
-        loss_h = self.loss_fn(pred_h, target_h)
-        loss_s = self.loss_fn(pred_s, target_s)
-
-        # Combine Hue and Saturation loss for a single chrominance term
-        loss_hs = loss_h + loss_s
-
-        # Weighted sum of losses
-        total_loss = self.v_weight * loss_v + self.hs_weight * loss_hs
-        return total_loss
-
-
-class SSIMHSVLoss(Metric):
-    m_name = 'hybrid_ssim_hsv_loss'
-
-    def __init__(self, device: str, lmbd_coeff: float = 0.7, data_range: float=1.0, kernel: int=7):
-        super(SSIMHSVLoss, self).__init__(device)
-        self._ssim_func = SSIMLoss(device, data_range=data_range, kern_size=kernel)
-        self._hsv_func = HSVLoss(device)
-        self.lmbd_coeff = lmbd_coeff
+        # Kornia's rgb_to_lab expects input in [0, 1] for RGB.
+        # Output L is [0, 100], a* and b* are [-100, 100] typically.
+        self.rgb_to_lab_converter = kornia_rgb_to_lab
+        # Or if you want to use the manual implementation (less recommended for production):
+        # self.rgb_to_lab_converter = rgb_to_lab_manual
 
     def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
-        return self._ssim_func(y_pred, y_true) + self.lmbd_coeff * self._hsv_func(y_pred, y_true)
+        """
+                Calculates the composite loss.
+
+                Args:
+                    denoised_image (torch.Tensor): The output of your denoising network (in RGB, range [0, 1]).
+                                                   Shape: (B, 3, H, W)
+                    reference_image (torch.Tensor): The ground truth/reference image (in RGB, range [0, 1]).
+                                                    Shape: (B, 3, H, W)
+
+                Returns:
+                    torch.Tensor: The calculated composite loss.
+                """
+        # 1. SSIM Loss (on RGB)
+        # Ensure images are in the correct data range for SSIM (usually [0, 1] or [0, 255])
+        # based on your SSIM implementation. Kornia's rgb_to_lab expects [0, 1].
+        ssim_loss_val = self.ssim_loss(y_pred, y_true)  # This is (1 - SSIM)
+
+        # 2. Convert to L*a*b*
+        # Kornia's rgb_to_lab expects input in [0, 1] range.
+        denoised_lab = self.rgb_to_lab_converter(y_pred)
+        reference_lab = self.rgb_to_lab_converter(y_true)
+
+        # Separate L, a*, b* channels
+        denoised_L, denoised_a, denoised_b = denoised_lab[:, 0, :, :], denoised_lab[:, 1, :, :], denoised_lab[:, 2, :,
+                                                                                                 :]
+        reference_L, reference_a, reference_b = reference_lab[:, 0, :, :], reference_lab[:, 1, :, :], reference_lab[:,
+                                                                                                      2, :, :]
+
+        # 3. L1 Loss on a* and b* channels (Chrominance)
+        color_loss_ab = self.l1_loss(denoised_a, reference_a) + self.l1_loss(denoised_b, reference_b)
+
+        # 4. Optional: L1 Loss on L* channel (Luminance)
+        color_loss_l = torch.tensor(0.0, device=y_pred.device)
+        if self.color_weight_l > 0:
+            color_loss_l = self.l1_loss(denoised_L, reference_L)
+
+        # Combine losses
+        total_loss = (self.ssim_weight * ssim_loss_val +
+                      self.color_weight_ab * color_loss_ab +
+                      self.color_weight_l * color_loss_l)
+
+        return total_loss
