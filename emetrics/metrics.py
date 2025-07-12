@@ -152,7 +152,7 @@ class PSNRLoss(Metric):
 class SSIMLabColorLoss(Metric):
     m_name = 'color_lab_loss'
 
-    def __init__(self, device: str='cuda', ssim_weight=1.0, color_weight_ab=0.7, color_weight_l=0.3, reduction='mean'):
+    def __init__(self, device: str='cuda', ssim_weight=1.0, color_weight_ab=0.6, color_weight_l=0.4, reduction='mean'):
         super(SSIMLabColorLoss, self).__init__(device)
         self.ssim_weight = ssim_weight
         self.color_weight_ab = color_weight_ab
@@ -186,8 +186,6 @@ class SSIMLabColorLoss(Metric):
                     torch.Tensor: The calculated composite loss.
                 """
         # 1. SSIM Loss (on RGB)
-        # Ensure images are in the correct data range for SSIM (usually [0, 1] or [0, 255])
-        # based on your SSIM implementation. Kornia's rgb_to_lab expects [0, 1].
         ssim_loss_val = self.ssim_loss(y_pred, y_true)  # This is (1 - SSIM)
 
         # 2. Convert to L*a*b*
@@ -201,17 +199,18 @@ class SSIMLabColorLoss(Metric):
         reference_L, reference_a, reference_b = reference_lab[:, 0, :, :], reference_lab[:, 1, :, :], reference_lab[:,
                                                                                                       2, :, :]
 
-        # 3. L1 Loss on a* and b* channels (Chrominance)
-        color_loss_ab = self.l1_loss(denoised_a, reference_a) + self.l1_loss(denoised_b, reference_b)
+        # Calculate L1 loss for each component
+        # L* range is [0, 100], so normalize by 100
+        loss_L = self.l1_loss(denoised_L, reference_L) / 100.0 if self.color_weight_l > 0 else 0.0
 
-        # 4. Optional: L1 Loss on L* channel (Luminance)
-        color_loss_l = torch.tensor(0.0, device=y_pred.device)
-        if self.color_weight_l > 0:
-            color_loss_l = self.l1_loss(denoised_L, reference_L)
+        # a* and b* range is approx [-100, 100], so normalize by 200
+        loss_a = self.l1_loss(denoised_a, reference_a) / 200.0
+        loss_b = self.l1_loss(denoised_b, reference_b) / 200.0
 
-        # Combine losses
+        color_loss_ab = (loss_a + loss_b) / 2
+
         total_loss = (self.ssim_weight * ssim_loss_val +
                       self.color_weight_ab * color_loss_ab +
-                      self.color_weight_l * color_loss_l)
+                      self.color_weight_l * loss_L)
 
         return total_loss
