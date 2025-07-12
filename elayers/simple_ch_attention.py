@@ -43,13 +43,14 @@ class SimpleChannelAttention(nn.Module):
         self.conv = nn.Conv2d(in_channels=in_channels, out_channels=in_channels, kernel_size=1,
                               stride=1, padding=0, bias=True)
         self.compress_method = channel_compress_methods
-        self.compress_weight = nn.Parameter(torch.ones((len(channel_compress_methods), 1)), requires_grad=True)
+        self.compress_weight = [torch.ones((1,), requires_grad=True) for _ in range(len(channel_compress_methods))]
         self.prob_func = nn.Sigmoid()
 
     def _get_compressed_vals(self, x: torch.Tensor) -> torch.Tensor:
-        compress_vals = torch.stack([compress_method(x).flatten() for compress_method in self.compress_method], dim=-1)
-        compress_vals = compress_vals * self.compress_weight
-        return torch.sum(compress_vals, dim=0).reshape(x.shape[0], x.shape[1], 1, 1)
+        compress_vals = torch.stack([compress_method(x) * compress_weight
+                                     for compress_method, compress_weight in
+                                     zip(self.compress_method, self.compress_weight)], dim=-1)
+        return torch.sum(compress_vals, dim=-1).reshape(x.shape[0], x.shape[1], 1, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         weighted_compress = self._get_compressed_vals(x)
