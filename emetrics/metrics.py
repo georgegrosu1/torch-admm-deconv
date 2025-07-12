@@ -189,7 +189,6 @@ class SSIMLabColorLoss(Metric):
         ssim_loss_val = self.ssim_loss(y_pred, y_true)  # This is (1 - SSIM)
 
         # 2. Convert to L*a*b*
-        # Kornia's rgb_to_lab expects input in [0, 1] range.
         denoised_lab = self.rgb_to_lab_converter(y_pred)
         reference_lab = self.rgb_to_lab_converter(y_true)
 
