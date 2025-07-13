@@ -4,14 +4,14 @@ import torch.nn as nn
 from elayers.cwa import ChannelWiseAttention, ChannelCompression
 
 
-class TopNChannelPooling(nn.Module):
+class AttentionChannelPooling(nn.Module):
     def __init__(self,
                  in_channels: int,
                  select_channels: int,
                  compressions: list[ChannelCompression] = (ChannelCompression.STD, ChannelCompression.MEDIAN),
                  probas_channels_factor: int = 2,
                  reduce_probas_space: bool = False):
-        super(TopNChannelPooling, self).__init__()
+        super(AttentionChannelPooling, self).__init__()
 
         self.select_channels = select_channels
         self.compressions = compressions
