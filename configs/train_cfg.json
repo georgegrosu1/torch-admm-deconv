@@ -1,14 +1,14 @@
 {
   "train": {
     "ckpt": null,
-    "x_path": "C:/Users/40774/Dev/datasets/RENOIR/orig/train/y",
-    "y_path": "C:/Users/40774/Dev/datasets/RENOIR/orig/train/y",
+    "x_path": "C:/Users/40774/Dev/datasets/rnind_bsd/train/y",
+    "y_path": "C:/Users/40774/Dev/datasets/rnind_bsd/train/y",
     "batch_size": 2
   },
   "eval": {
-    "x_path": "C:/Users/40774/Dev/datasets/RENOIR/orig/test/y",
-    "y_path": "C:/Users/40774/Dev/datasets/RENOIR/orig/test/y",
-    "batch_size": 8
+    "x_path": "C:/Users/40774/Dev/datasets/rnind_bsd/test/y",
+    "y_path": "C:/Users/40774/Dev/datasets/rnind_bsd/test/y",
+    "batch_size": 2
   },
   "im_shape": [256, 256],
   "lr": 8.8e-4,

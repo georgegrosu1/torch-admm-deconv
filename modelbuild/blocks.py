@@ -220,7 +220,6 @@ class DivergentAttention(nn.Module):
         self.attentions = nn.ModuleList()
         self.convout = nn.Conv2d(in_channels=conv_filters*branches, out_channels=out_channels,
                                  kernel_size=1, stride=1, padding=0, bias=True)
-        self.simp_ch_att = SimpleChannelAttention(out_channels)
         for i in range(branches):
             self.convs.append(nn.Conv2d(in_channels=in_channels, out_channels=conv_filters, kernel_size=1, stride=1,
                                         padding=0, bias=True))
@@ -245,7 +244,7 @@ class DivergentAttention(nn.Module):
         outs_b = torch.cat(tensors=[attention(feat) + feat for attention, feat in
                                     zip(self.attentions[len(self.attentions) // 2:], outs[len(outs) // 2:])], dim=1)
         outs = torch.cat([outs_a * outs_b, outs_a + outs_b], dim=1)
-        return self.out_activation(self.simp_ch_att(self.convout(outs)))
+        return self.out_activation(self.convout(outs))
 
 
 class UpDownBlock(nn.Module):

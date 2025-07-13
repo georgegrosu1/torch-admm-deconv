@@ -37,13 +37,19 @@ class SimpleChannelAttention(nn.Module):
                  in_channels: int,
                  channel_compress_methods: list[ChannelCompression] = (ChannelCompression.STD,
                                                                       ChannelCompression.MEDIAN,
-                                                                      ChannelCompression.MODE),):
+                                                                      ChannelCompression.MODE,
+                                                                       ChannelCompression.MAX,
+                                                                       ChannelCompression.MEAN),):
         super(SimpleChannelAttention, self).__init__()
         self.in_channels = in_channels
-        self.conv = nn.Conv2d(in_channels=in_channels, out_channels=in_channels, kernel_size=1,
+        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=in_channels * 2, kernel_size=1,
+                              stride=1, padding=0, bias=True)
+        self.conv2 = nn.Conv2d(in_channels=in_channels * 2, out_channels=in_channels, kernel_size=1,
                               stride=1, padding=0, bias=True)
         self.compress_method = channel_compress_methods
-        self.compress_weight = [torch.ones((1,), requires_grad=True) for _ in range(len(channel_compress_methods))]
+        self.compress_weight = nn.ParameterList()
+        for _ in range(len(channel_compress_methods)):
+            self.compress_weight.append(nn.Parameter(torch.ones((1,)), requires_grad=True))
         self.prob_func = nn.Sigmoid()
 
     def _get_compressed_vals(self, x: torch.Tensor) -> torch.Tensor:
@@ -54,4 +60,4 @@ class SimpleChannelAttention(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         weighted_compress = self._get_compressed_vals(x)
-        return x * self.prob_func(self.conv(x) * weighted_compress)
+        return x * self.prob_func(self.conv2(self.conv1(x)) * weighted_compress)
