@@ -4,7 +4,6 @@ from typing import Tuple, List
 
 from elayers.admmdeconv import ADMMDeconv
 from elayers.attentions import CBAM
-from elayers.simple_ch_attention import SimpleChannelAttention
 
 
 def compute_residual_dec_input_channels(enc_out_channels: List[int], dec_out_channels: List[int]) -> List[int]:
@@ -137,65 +136,6 @@ class LayerNorm2d(nn.Module):
 
     def forward(self, x):
         return LayerNormFunction.apply(x, self.weight, self.bias, self.eps)
-
-
-class TopNChannelPooling(nn.Module):
-    """
-    A PyTorch layer that selects the top N ranked channel values for each pixel,
-    without performing any further pooling operation on these N values.
-    For each pixel (h, w), this layer takes the feature vector along the channel dimension,
-    sorts its values, and directly outputs the top N values.
-    Args:
-        n_channels_to_select (int): The number of top-ranked channels to select.
-                                    Must be less than or equal to the input number of channels.
-    """
-    def __init__(self,
-                 n_channels_to_select: int,
-                 gate_channels: int=None,
-                 attention_reduction: int=None,
-                 pool_types: tuple=('avg', 'lp'),
-                 use_spatial: bool=True,
-                 conv_filters: int=None):
-        super().__init__()
-        if not isinstance(n_channels_to_select, int) or n_channels_to_select <= 0:
-            raise ValueError("n_channels_to_select must be a positive integer.")
-        self.n_channels_to_select = n_channels_to_select
-
-        if conv_filters is not None:
-            self.conv_exp = nn.Conv2d(gate_channels, conv_filters, 1, 1, bias=True)
-            self.acti = nn.GELU()
-            gate_channels = conv_filters
-        else:
-            self.conv_exp = None
-            self.acti = None
-
-        if gate_channels is not None and attention_reduction is not None:
-            self.cbam = CBAM(gate_channels=gate_channels, reduction_ratio=attention_reduction,
-                             pool_types=pool_types, use_spatial=use_spatial)
-        else:
-            self.cbam = None
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        """
-        Args:
-            x (torch.Tensor): Input tensor of shape (B, C, H, W).
-        Returns:
-            torch.Tensor: Output tensor containing the top N channel values for each pixel.
-                          Shape will be (B, n_channels_to_select, H, W).
-        """
-        x = self.acti(self.conv_exp(x)) if self.conv_exp is not None else x
-        x = self.cbam(x) if self.cbam is not None else x
-        B, C, H, W = x.shape
-        if self.n_channels_to_select > C:
-            raise ValueError(f"n_channels_to_select ({self.n_channels_to_select}) "
-                             f"cannot be greater than the number of input channels ({C}).")
-        # Reshape to (B * H * W, C) for easier sorting along the channel dimension
-        # Get the top N values for each pixel (row) along the channel dimension
-        # top_n_values will have shape (B * H * W, n_channels_to_select)
-        x, _ = torch.topk(x.permute(0, 2, 3, 1).reshape(-1, C),
-                                     k=self.n_channels_to_select, dim=-1, largest=True, sorted=False)
-        # Reshape back to (B, n_channels_to_select, H, W)
-        return x.reshape(B, H, W, self.n_channels_to_select).permute(0, 3, 1, 2).contiguous()
 
 
 class DivergentAttention(nn.Module):

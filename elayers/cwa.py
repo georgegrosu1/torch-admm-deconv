@@ -32,20 +32,29 @@ class ChannelCompression(Enum):
     MODE = amodes
 
 
-class SimpleChannelAttention(nn.Module):
+class ChannelWiseAttention(nn.Module):
     def __init__(self,
                  in_channels: int,
                  channel_compress_methods: list[ChannelCompression] = (ChannelCompression.STD,
                                                                       ChannelCompression.MEDIAN,
                                                                       ChannelCompression.MODE,
                                                                        ChannelCompression.MAX,
-                                                                       ChannelCompression.MEAN),):
-        super(SimpleChannelAttention, self).__init__()
+                                                                       ChannelCompression.MEAN),
+                 probas_ch_factor: int = 2,
+                 reduce_probas_space: bool = False,
+                 probas_only: bool = False):
+        super(ChannelWiseAttention, self).__init__()
         self.in_channels = in_channels
-        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=in_channels * 2, kernel_size=1,
-                              stride=1, padding=0, bias=True)
-        self.conv2 = nn.Conv2d(in_channels=in_channels * 2, out_channels=in_channels, kernel_size=1,
-                              stride=1, padding=0, bias=True)
+        self.probas_ch_factor = probas_ch_factor
+        self.reduce_probas_space = reduce_probas_space
+        self.probas_only = probas_only
+
+        self.probas_space_size = in_channels // probas_ch_factor if reduce_probas_space else in_channels * probas_ch_factor
+
+        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=self.probas_space_size, kernel_size=1,
+                               stride=1, padding=0, bias=True)
+        self.conv2 = nn.Conv2d(in_channels=self.probas_space_size, out_channels=in_channels, kernel_size=1,
+                               stride=1, padding=0, bias=True)
         self.compress_method = channel_compress_methods
         self.compress_weight = nn.ParameterList()
         for _ in range(len(channel_compress_methods)):
@@ -60,4 +69,6 @@ class SimpleChannelAttention(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         weighted_compress = self._get_compressed_vals(x)
+        if self.probas_only:
+            return self.prob_func(self.conv2(self.conv1(x)) * weighted_compress)
         return x * self.prob_func(self.conv2(self.conv1(x)) * weighted_compress)
