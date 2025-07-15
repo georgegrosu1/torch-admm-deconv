@@ -70,5 +70,5 @@ class ChannelWiseAttention(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         weighted_compress = self._get_compressed_vals(x)
         if self.probas_only:
-            return self.prob_func(self.conv2(self.conv1(x)) * weighted_compress)
-        return x * self.prob_func(self.conv2(self.conv1(x)) * weighted_compress)
+            return self.prob_func(self.conv2(self.conv1(x)) * weighted_compress).mean(dim=(2, 3))
+        return x * self.prob_func(self.conv2(self.conv1(x)) * weighted_compress).mean(dim=(2, 3))

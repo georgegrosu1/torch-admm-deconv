@@ -23,7 +23,7 @@ class AttentionChannelPooling(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         _, _, H, W = x.shape
-        channels_probabilities = self.cwa(x).mean(dim=(2, 3))
+        channels_probabilities = self.cwa(x)
 
         _, top_n_indices = torch.topk(channels_probabilities, self.select_channels, dim=-1)
         expanded_top_n_indices = top_n_indices.unsqueeze(-1).unsqueeze(-1).expand(-1, -1, H, W)

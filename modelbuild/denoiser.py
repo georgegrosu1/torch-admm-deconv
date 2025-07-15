@@ -47,7 +47,7 @@ class DivergentRestorer(nn.Module):
                                                       gate_channels=gate_channels,
                                                       attention_reduction=attention_reduction,
                                                       out_activation=intermediate_activation))
-                # self.top_ch.append(TopNChannelPooling(filters, gate_channels * 2, attention_reduction,
+                # self.top_ch.append(AttentionChannelPooling(filters, gate_channels * 2, attention_reduction,
                 #                                       conv_filters=gate_channels * 4))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
