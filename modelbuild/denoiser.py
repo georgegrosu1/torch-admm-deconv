@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from modelbuild.blocks import DivergentAttention, TopNChannelPooling
+from elayers.simple_ch_attention import SimpleChannelAttention
 
 
 class DivergentRestorer(nn.Module):
@@ -20,9 +21,10 @@ class DivergentRestorer(nn.Module):
         self._level_branches = level_branches
 
         self.blocks = nn.ModuleList()
-        # self.top_ch = nn.ModuleList()
+        self.scas = nn.ModuleList()
         for i in range(num_levels):
             if i == 0:
+                self.scas.append(SimpleChannelAttention(filters))
                 self.blocks.append(DivergentAttention(branches=self._level_branches[i],
                                                       in_channels=in_channels,
                                                       out_channels=filters,
@@ -32,6 +34,7 @@ class DivergentRestorer(nn.Module):
                                                       out_activation=intermediate_activation,
                                                       admms=admms))
             elif i == num_levels - 1:
+                self.scas.append(SimpleChannelAttention(filters))
                 self.blocks.append(DivergentAttention(branches=self._level_branches[i],
                                                       in_channels=filters + in_channels,
                                                       out_channels=final_channels,
@@ -40,6 +43,7 @@ class DivergentRestorer(nn.Module):
                                                       attention_reduction=attention_reduction,
                                                       out_activation=output_activation))
             else:
+                self.scas.append(SimpleChannelAttention(filters))
                 self.blocks.append(DivergentAttention(branches=self._level_branches[i],
                                                       in_channels=filters + in_channels,
                                                       out_channels=filters,
@@ -52,6 +56,12 @@ class DivergentRestorer(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.blocks[0](x)
+        out = self.scas[0](out)
         for i in range(1, len(self.blocks)):
-            out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
+            if i < len(self.blocks) - 1:
+                out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
+                out = self.scas[i](out)
+            else:
+                out = self.scas[i](out)
+                out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
         return out
