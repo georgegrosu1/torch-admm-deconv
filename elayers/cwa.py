@@ -65,7 +65,7 @@ class ChannelWiseAttention(nn.Module):
         self.compress_method = channel_compress_methods
         self.compress_weight = nn.ParameterList()
         for _ in range(len(channel_compress_methods)):
-            self.compress_weight.append(nn.Parameter(torch.randn((1,)), requires_grad=True))
+            self.compress_weight.append(nn.Parameter(torch.ones((1,)), requires_grad=True))
         self.prob_func = nn.Sigmoid()
 
     def _get_compressed_vals(self, x: torch.Tensor) -> torch.Tensor:
@@ -77,9 +77,9 @@ class ChannelWiseAttention(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         weighted_compress = self._get_compressed_vals(x)
         if self.probas_only:
-            out = self.prob_func(self.conv2(self.conv1(x)) * weighted_compress).mean(dim=(2, 3))
+            out = self.prob_func(self.conv2(self.conv1(x)) * weighted_compress)
         else:
-            out = x * self.prob_func(self.conv2(self.conv1(x)) * weighted_compress).mean(dim=(2, 3))
+            out = x * self.prob_func(self.conv2(self.conv1(x)) * weighted_compress)
 
         if self.reduce_mean:
             return out.mean(dim=(2, 3))
