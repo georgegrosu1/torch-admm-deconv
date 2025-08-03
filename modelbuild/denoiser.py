@@ -22,15 +22,6 @@ class DivergentRestorer(nn.Module):
         self._level_branches = level_branches
 
         self.blocks = nn.ModuleList()
-        self.scas_1 = nn.ModuleList()
-        self.scas_2 = nn.ModuleList()
-        self.cwa_num = 2
-        for _ in range(self.cwa_num):
-            self.scas_1.append(ChannelWiseAttention(filters))
-            self.scas_2.append(ChannelWiseAttention(filters))
-        self.scas_3 = ChannelWiseAttention(filters)
-        self.chpool_1 = AttentionChannelPooling(self.cwa_num * filters, select_channels=filters, reduce_probas_space=False)
-        self.chpool_2 = AttentionChannelPooling(self.cwa_num * filters, select_channels=filters, reduce_probas_space=True)
         for i in range(num_levels):
             if i == 0:
                 self.blocks.append(DivergentAttention(branches=self._level_branches[i],
@@ -62,14 +53,9 @@ class DivergentRestorer(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.blocks[0](x)
-        out = torch.cat([cwa(out) for cwa in self.scas_1], dim=1)
-        out = self.chpool_1(out)
         for i in range(1, len(self.blocks)):
             if i < len(self.blocks) - 1:
                 out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
-                out = torch.cat([cwa(out) for cwa in self.scas_2], dim=1)
-                out = self.chpool_2(out)
             else:
-                out = self.scas_3(out)
                 out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
         return out

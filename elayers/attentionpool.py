@@ -8,7 +8,7 @@ class AttentionChannelPooling(nn.Module):
     def __init__(self,
                  in_channels: int,
                  select_channels: int,
-                 compressions: list[ChannelCompression] = (ChannelCompression.STD, ChannelCompression.MEDIAN),
+                 compressions: list[ChannelCompression] = (ChannelCompression.STD, ChannelCompression.MEDIAN, ChannelCompression.MAX),
                  probas_channels_factor: int = 2,
                  reduce_probas_space: bool = False):
         super(AttentionChannelPooling, self).__init__()
