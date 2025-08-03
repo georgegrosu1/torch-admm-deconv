@@ -24,12 +24,17 @@ def amax(x: torch.Tensor) -> torch.Tensor:
     return torch.max(x.flatten().reshape(x.shape[0], x.shape[1], -1), -1).values
 
 
+def amin(x: torch.Tensor) -> torch.Tensor:
+    return torch.min(x.flatten().reshape(x.shape[0], x.shape[1], -1), -1).values
+
+
 class ChannelCompression(Enum):
     STD = astd
     MEAN = amean
     MAX = amax
     MEDIAN = amedian
     MODE = amodes
+    MIN = amin
 
 
 class ChannelWiseAttention(nn.Module):
@@ -42,11 +47,13 @@ class ChannelWiseAttention(nn.Module):
                                                                        ChannelCompression.MEAN),
                  probas_ch_factor: int = 2,
                  reduce_probas_space: bool = False,
+                 reduce_mean: bool = False,
                  probas_only: bool = False):
         super(ChannelWiseAttention, self).__init__()
         self.in_channels = in_channels
         self.probas_ch_factor = probas_ch_factor
         self.reduce_probas_space = reduce_probas_space
+        self.reduce_mean = reduce_mean
         self.probas_only = probas_only
 
         self.probas_space_size = in_channels // probas_ch_factor if reduce_probas_space else in_channels * probas_ch_factor
@@ -58,7 +65,7 @@ class ChannelWiseAttention(nn.Module):
         self.compress_method = channel_compress_methods
         self.compress_weight = nn.ParameterList()
         for _ in range(len(channel_compress_methods)):
-            self.compress_weight.append(nn.Parameter(torch.ones((1,)), requires_grad=True))
+            self.compress_weight.append(nn.Parameter(torch.randn((1,)), requires_grad=True))
         self.prob_func = nn.Sigmoid()
 
     def _get_compressed_vals(self, x: torch.Tensor) -> torch.Tensor:
@@ -70,5 +77,10 @@ class ChannelWiseAttention(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         weighted_compress = self._get_compressed_vals(x)
         if self.probas_only:
-            return self.prob_func(self.conv2(self.conv1(x)) * weighted_compress).mean(dim=(2, 3))
-        return x * self.prob_func(self.conv2(self.conv1(x)) * weighted_compress).mean(dim=(2, 3))
+            out = self.prob_func(self.conv2(self.conv1(x)) * weighted_compress).mean(dim=(2, 3))
+        else:
+            out = x * self.prob_func(self.conv2(self.conv1(x)) * weighted_compress).mean(dim=(2, 3))
+
+        if self.reduce_mean:
+            return out.mean(dim=(2, 3))
+        return out

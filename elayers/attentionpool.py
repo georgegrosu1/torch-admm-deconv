@@ -19,7 +19,7 @@ class AttentionChannelPooling(nn.Module):
         self.reduce_probas_space = reduce_probas_space
 
         self.cwa = ChannelWiseAttention(in_channels, compressions, probas_channels_factor,
-                                        reduce_probas_space=reduce_probas_space, probas_only=True)
+                                        reduce_probas_space=reduce_probas_space, reduce_mean=True, probas_only=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         _, _, H, W = x.shape
