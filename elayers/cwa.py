@@ -41,7 +41,7 @@ class ChannelWiseAttention(nn.Module):
     def __init__(self,
                  in_channels: int,
                  channel_compress_methods: list[ChannelCompression] = (ChannelCompression.STD,
-                                                                      ChannelCompression.MEDIAN,
+                                                                      ChannelCompression.MEDIAN, 
                                                                       ChannelCompression.MODE,
                                                                        ChannelCompression.MAX,
                                                                        ChannelCompression.MEAN),
