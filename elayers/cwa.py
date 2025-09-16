@@ -59,8 +59,8 @@ class ChannelWiseAttention(nn.Module):
         self.probas_space_size = in_channels // probas_ch_factor if reduce_probas_space else in_channels * probas_ch_factor
 
         self.upscale = nn.Upsample(scale_factor=2, mode='bicubic', align_corners=True)
-        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=self.probas_space_size, kernel_size=3,
-                               stride=2, padding=1, bias=True)
+        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=self.probas_space_size, kernel_size=1,
+                               stride=2, padding=0, bias=True)
         self.conv2 = nn.Conv2d(in_channels=self.probas_space_size, out_channels=in_channels, kernel_size=1,
                                stride=1, padding=0, bias=True)
         self.compress_method = channel_compress_methods
@@ -76,12 +76,12 @@ class ChannelWiseAttention(nn.Module):
         return torch.sum(compress_vals, dim=-1).reshape(x.shape[0], x.shape[1], 1, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.upscale(x)
-        weighted_compress = self._get_compressed_vals(x)
+        x_up = self.upscale(x)
+        weighted_compress = self._get_compressed_vals(x_up)
         if self.probas_only:
-            out = self.prob_func(self.conv2(self.conv1(x)) * weighted_compress)
+            out = self.prob_func(self.conv2(self.conv1(x_up)) * weighted_compress)
         else:
-            out = x * self.prob_func(self.conv2(self.conv1(x)) * weighted_compress)
+            out = x * self.prob_func(self.conv2(self.conv1(x_up)) * weighted_compress)
 
         if self.reduce_mean:
             return out.mean(dim=(2, 3))
