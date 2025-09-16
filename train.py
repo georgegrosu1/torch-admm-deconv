@@ -68,24 +68,19 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
 
-    if train_cfg['train']['ckpt'] is not None:
-        entry_model = DivergentRestorer([2, 8, 32], 3,
-                                        3, 86,
-                                        86, 8,
-                                        output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
-        checkpoint = torch.load(train_cfg['train']['ckpt'], weights_only=False, map_location=device)
-        entry_model.load_state_dict(checkpoint['model_state_dict'])
-        # Freeze all
-        print('WITH FROZEN!!!!')
-        for param in entry_model.parameters():
-            param.requires_grad = False
-    else:
-        entry_model = None
-
     model = DivergentRestorer([2, 8, 32], 3,
                               3, 86,
                               86, 8,
                               output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
+
+    if train_cfg['train']['ckpt'] is not None:
+        print("!!!!! LOADING CKPT !!!!!!!")
+        checkpoint = torch.load(train_cfg['train']['ckpt'], weights_only=False, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        # Freeze all
+        # print('WITH FROZEN!!!!')
+        # for param in entry_model.parameters():
+        #     param.requires_grad = False
 
     # model = NAFNet(img_channel=3, width=64, middle_blk_num=12,
     #                enc_blk_nums=[2, 2, 4, 8], dec_blk_nums=[2, 2, 2, 2])
