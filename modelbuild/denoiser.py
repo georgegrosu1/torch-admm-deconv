@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from modelbuild.blocks import DivergentAttention
 from elayers.cwa import ChannelWiseAttention
+from modelbuild.blocks import MultiScaleConvPool
 from elayers.attentionpool import AttentionChannelPooling
 
 
@@ -52,6 +53,10 @@ class DivergentRestorer(nn.Module):
                                                       out_activation=intermediate_activation))
                 # self.top_ch.append(AttentionChannelPooling(filters, gate_channels * 2, attention_reduction,
                 #                                       conv_filters=gate_channels * 4))
+            self.mscp = MultiScaleConvPool(in_channels=filters + in_channels,
+                                           out_channels=filters + in_channels,
+                                           filters=filters * 2,
+                                           ks=[1, 3, 5])
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.blocks[0](x)
@@ -59,6 +64,7 @@ class DivergentRestorer(nn.Module):
         for i in range(1, len(self.blocks)):
             if i < len(self.blocks) - 1:
                 out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
+                out = self.mscp(torch.cat(tensors=[out, x], dim=1))
                 out = self.scas[i](out)
             else:
                 out = self.scas[i](out)

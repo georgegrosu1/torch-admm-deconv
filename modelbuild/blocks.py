@@ -4,6 +4,23 @@ from typing import Tuple, List
 
 from elayers.admmdeconv import ADMMDeconv
 from elayers.attentions import CBAM
+from elayers.attentionpool import AttentionChannelPooling
+
+
+def same_padding(input_tensor: torch.Tensor, kernel_size: int) -> torch.Tensor:
+    if isinstance(kernel_size, int):
+        kernel_size = (kernel_size, kernel_size)
+
+    padding_h = (kernel_size[0] - 1) // 2
+    padding_w = (kernel_size[1] - 1) // 2
+
+    # Calculate total padding, assuming odd kernel sizes
+    total_padding = (padding_w, padding_w, padding_h, padding_h)
+
+    # Pad the tensor
+    padded_tensor = nn.functional.pad(input_tensor, total_padding, mode='reflect')
+
+    return padded_tensor
 
 
 def compute_residual_dec_input_channels(enc_out_channels: List[int], dec_out_channels: List[int]) -> List[int]:
@@ -208,6 +225,37 @@ class UpDownBlock(nn.Module):
         x = self.chc(x)
         x = self.down_block(x)
         return self.chc2(x)
+
+
+class MultiScaleConvPool(nn.Module):
+    def __init__(self,
+                 in_channels: int,
+                 out_channels: int,
+                 filters: int,
+                 ks: list[int]):
+        super(MultiScaleConvPool, self).__init__()
+        self.convs = nn.ModuleList()
+        self.ks = ks
+        for i in range(len(ks)):
+            self.convs.append(nn.Conv2d(in_channels=in_channels, out_channels=filters, kernel_size=ks[i], stride=1,
+                                        bias=True))
+        self.cwa_pool = AttentionChannelPooling(in_channels=filters * len(ks), select_channels=out_channels)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = torch.cat([conv(same_padding(x, ks)) for conv, ks in zip(self.convs, self.ks)], dim=1)
+        return self.cwa_pool(x)
+
+
+class MultiADMM(nn.Module):
+    def __init__(self,
+                 admm_dicts: list[dict]):
+        super(MultiADMM, self).__init__()
+        self.admms = nn.ModuleList()
+        for admm_dict in admm_dicts:
+            self.admms.append(ADMMDeconv(**admm_dict))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.cat([admm_l(x) for admm_l in self.admms], dim=1)
 
 
 class DownBlock(nn.Module):
