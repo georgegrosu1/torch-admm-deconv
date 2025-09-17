@@ -3,6 +3,8 @@ import torch.nn as nn
 
 from enum import Enum
 
+from modelbuild.blocks import LayerNorm2d
+
 
 def amedian(x: torch.Tensor) -> torch.Tensor:
     return torch.median(x.flatten().reshape(x.shape[0], x.shape[1], -1), -1).values
@@ -61,6 +63,7 @@ class ChannelWiseAttention(nn.Module):
         self.probas_space_size = in_channels // probas_ch_factor if reduce_probas_space else in_channels * probas_ch_factor
 
         self.upscale = nn.Upsample(scale_factor=2, mode='bicubic', align_corners=True)
+        self.norm = LayerNorm2d(channels=in_channels)
         self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=self.probas_space_size, kernel_size=1,
                                stride=2, padding=0, bias=True)
         self.conv2 = nn.Conv2d(in_channels=self.probas_space_size, out_channels=in_channels, kernel_size=1,
@@ -69,27 +72,17 @@ class ChannelWiseAttention(nn.Module):
         self.compress_weight = nn.ParameterList()
         for _ in range(len(channel_compress_methods)):
             self.compress_weight.append(nn.Parameter(torch.ones((1,)), requires_grad=True))
-
-        self.judges_in_size = self.in_channels * len(self.compress_methods)
-        self.judges_size = self.judges_in_size // self.compress_judges_mult if self.reduce_probas_space else (
-                self.judges_in_size * self.compress_judges_mult)
-        self.judges = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(self.judges_in_size, self.judges_size),
-            nn.GELU(),
-            nn.Linear(self.judges_size, self.judges_in_size)
-        )
         self.prob_func = nn.Sigmoid()
 
     def _get_compressed_vals(self, x: torch.Tensor) -> torch.Tensor:
         compress_vals = torch.stack([compress_method(x) * compress_weight
                                      for compress_method, compress_weight in
                                      zip(self.compress_methods, self.compress_weight)], dim=-1)
-        compress_vals = self.judges(compress_vals).reshape(x.shape[0], x.shape[1], len(self.compress_methods))
         return torch.sum(compress_vals, dim=-1).reshape(x.shape[0], x.shape[1], 1, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_up = self.upscale(x)
+        x_up = self.norm(x_up)
         weighted_compress = self._get_compressed_vals(x_up)
         if self.probas_only:
             out = self.prob_func(self.conv2(self.conv1(x_up)) * weighted_compress)
