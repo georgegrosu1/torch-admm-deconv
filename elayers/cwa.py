@@ -3,8 +3,6 @@ import torch.nn as nn
 
 from enum import Enum
 
-from modelbuild.blocks import LayerNorm2d
-
 
 def amedian(x: torch.Tensor) -> torch.Tensor:
     return torch.median(x.flatten().reshape(x.shape[0], x.shape[1], -1), -1).values
@@ -62,10 +60,9 @@ class ChannelWiseAttention(nn.Module):
 
         self.probas_space_size = in_channels // probas_ch_factor if reduce_probas_space else in_channels * probas_ch_factor
 
-        self.upscale = nn.Upsample(scale_factor=2, mode='bicubic', align_corners=True)
-        self.norm = LayerNorm2d(channels=in_channels)
+        self.upscale = nn.Upsample(scale_factor=4, mode='bicubic', align_corners=True)
         self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=self.probas_space_size, kernel_size=1,
-                               stride=2, padding=0, bias=True)
+                               stride=4, padding=0, bias=True)
         self.conv2 = nn.Conv2d(in_channels=self.probas_space_size, out_channels=in_channels, kernel_size=1,
                                stride=1, padding=0, bias=True)
         self.compress_methods = channel_compress_methods
@@ -82,7 +79,6 @@ class ChannelWiseAttention(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x_up = self.upscale(x)
-        x_up = self.norm(x_up)
         weighted_compress = self._get_compressed_vals(x_up)
         if self.probas_only:
             out = self.prob_func(self.conv2(self.conv1(x_up)) * weighted_compress)
