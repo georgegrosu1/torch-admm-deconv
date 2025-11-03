@@ -22,10 +22,10 @@ class DivergentRestorer(nn.Module):
         self._level_branches = level_branches
 
         self.upsample_modif = ParallelUpsampleReduce(
-            in_channels=final_channels,
-            scale_factor=3,
-            num_branches=num_levels,
-            branch_kernel_size=[3, 5, 7],
+            in_channels=filters,
+            scale_factor=2,
+            num_branches=4,
+            branch_kernel_size=[1, 3, 5, 7],
             branch_channels=filters,
             branch_bias=True,
             final_bias=True,
@@ -65,6 +65,7 @@ class DivergentRestorer(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.blocks[0](x)
         out = self.scas[0](out)
+        out = self.upsample_modif(out)
         for i in range(1, len(self.blocks)):
             if i < len(self.blocks) - 1:
                 out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
@@ -72,4 +73,4 @@ class DivergentRestorer(nn.Module):
             else:
                 out = self.scas[i](out)
                 out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
-        return self.upsample_modif(out)
+        return out

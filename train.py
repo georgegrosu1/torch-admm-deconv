@@ -89,7 +89,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     model = model.to(device)
     opt = torch.optim.AdamW(model.parameters(), train_cfg['lr'], betas=(0.9, 0.9))
 
-    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(opt, eta_min=1e-7, T_max=400000)
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt, T_0=8000, eta_min=1e-10)
 
     eval_metrics = [PSNRMetric(device), SCCMetric(device), SSIMMetric(device), MAELoss(device), UIQMetric(device)]
     loss_func = SSIMLabColorLoss(device)

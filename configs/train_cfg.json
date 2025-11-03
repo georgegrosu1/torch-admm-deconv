@@ -1,14 +1,14 @@
 {
   "train": {
-    "ckpt": null,
-    "x_path": "C:/Users/40774/Dev/datasets/rnind_bsd/train/y",
-    "y_path": "C:/Users/40774/Dev/datasets/rnind_bsd/train/y",
-    "batch_size": 2
+    "ckpt": "/root/Dev/torch-admm-deconv/trained_models/admm-div2k-sra3/Sun-Nov--2-10_15_16-2025/admm-div2k-sra3_epoch27_vloss0.0936.tar",
+    "x_path": "/root/Dev/datasets/rnind_bsd_div2k/train/y",
+    "y_path": "/root/Dev/datasets/rnind_bsd_div2k/train/y",
+    "batch_size": 3
   },
   "eval": {
-    "x_path": "C:/Users/40774/Dev/datasets/rnind_bsd/test/y",
-    "y_path": "C:/Users/40774/Dev/datasets/rnind_bsd/test/y",
-    "batch_size": 2
+    "x_path": "/root/Dev/datasets/rnind_bsd_div2k/test/y",
+    "y_path": "/root/Dev/datasets/rnind_bsd_div2k/test/y",
+    "batch_size": 8
   },
   "im_shape": [256, 256],
   "lr": 8.8e-4,
