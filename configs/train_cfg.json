@@ -12,5 +12,9 @@
   },
   "im_shape": [256, 256],
   "lr": 8.8e-4,
-  "epochs": 500
+  "epochs": 500,
+  "ema": {
+    "decay": 0.999,
+    "use_buffers": true
+  }
 }

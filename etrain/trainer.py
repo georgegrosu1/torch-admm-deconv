@@ -1,3 +1,5 @@
+from typing import Optional
+
 import torch
 from tqdm import tqdm
 from prettytable import PrettyTable
@@ -13,11 +15,13 @@ class NNTrainer:
                  loss: Metric,
                  metrics: list[Metric],
                  saver: NNSaver,
-                 logger: MetricsLogger = None):
+                 logger: MetricsLogger = None,
+                 averaged_model: Optional[torch.nn.Module] = None):
 
         self.loss = loss
         self.saver = saver
         self.logger = logger
+        self.averaged_model = averaged_model
         self._init_metrics(metrics)
 
 
@@ -41,9 +45,11 @@ class NNTrainer:
         for epoch in range(epochs):
             print(f'\n\n\n/////////////////////////////////// [ EPOCH: {epoch} ] ///////////////////////////////////')
             self.train(model, train_dataloader, optimizer)
+            loss_val = self.get_epoch_metrics('train')[self.loss.m_name]
             if eval_dataloader:
                 self.eval(model, eval_dataloader, lr_scheduler)
-            self.on_epoch_end(epoch, model, optimizer, self.get_epoch_metrics('eval')[self.loss.m_name])
+                loss_val = self.get_epoch_metrics('eval')[self.loss.m_name]
+            self.on_epoch_end(epoch, model, optimizer, loss_val, self.averaged_model)
 
 
     def train(self, model: torch.nn.Module, train_dataloader: DataLoader, optimizer: torch.optim.Optimizer):
@@ -58,6 +64,8 @@ class NNTrainer:
             loss.backward()
             torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=1)
             optimizer.step()
+            if self.averaged_model is not None:
+                self.averaged_model.update_parameters(model)
 
             self._update_performance_stats(loss, outputs, labels)
             self._print_current_metrics(pbar)
@@ -95,11 +103,13 @@ class NNTrainer:
              lr_scheduler: torch.optim.lr_scheduler.LRScheduler = None):
         self.logger.reinit_step_stats()
         model.eval()
+        eval_model = self.averaged_model if self.averaged_model is not None else model
+        eval_model.eval()
 
         print('\n [ EVALUATING ]')
         with torch.no_grad():
             for batch_idx, (inputs, labels) in tqdm(enumerate(eval_dataloader), total=len(eval_dataloader)):
-                outputs = model(inputs)
+                outputs = eval_model(inputs)
                 vloss = self.loss(outputs, labels)
                 if lr_scheduler is not None:
                     lr_scheduler.step()
@@ -124,6 +134,11 @@ class NNTrainer:
         return total_params
 
 
-    def on_epoch_end(self, epoch, model, optimizer, loss_val):
+    def on_epoch_end(self,
+                     epoch,
+                     model,
+                     optimizer,
+                     loss_val,
+                     averaged_model: Optional[torch.nn.Module] = None):
         logs_dict = self.logger.get_logged(reformat=True) if self.logger is not None else None
-        self.saver.save_on_epoch_end(epoch, model, optimizer, loss_val, logs_dict)
+        self.saver.save_on_epoch_end(epoch, model, optimizer, loss_val, logs_dict, averaged_model)

@@ -6,6 +6,9 @@ import argparse
 import numpy as np
 from pathlib import Path
 
+import torch
+from torch.optim.swa_utils import AveragedModel, get_ema_avg_fn
+
 from eprocessing.dataload import ImageDataset
 from modelbuild.denoiser import DivergentRestorer
 from modelbuild.nafnet import NAFNet
@@ -73,6 +76,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
                               86, 8,
                               output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
 
+    checkpoint = None
     if train_cfg['train']['ckpt'] is not None:
         print("!!!!! LOADING CKPT !!!!!!!")
         checkpoint = torch.load(train_cfg['train']['ckpt'], weights_only=False, map_location=device)
@@ -86,7 +90,20 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     #                enc_blk_nums=[2, 2, 4, 8], dec_blk_nums=[2, 2, 2, 2])
     # clipper = WeightClipper()
     # model.apply(clipper)
-    model = model.to(device)
+    torch_device = torch.device(device)
+    model = model.to(torch_device)
+
+    ema_cfg = train_cfg.get('ema', {})
+    ema_decay = float(ema_cfg.get('decay', 0.999))
+    ema_use_buffers = bool(ema_cfg.get('use_buffers', True))
+    averaged_model = AveragedModel(model, device=torch_device, avg_fn=get_ema_avg_fn(ema_decay), use_buffers=ema_use_buffers)
+
+    if checkpoint and 'averaged_model_state_dict' in checkpoint:
+        averaged_model.load_state_dict(checkpoint['averaged_model_state_dict'])
+        averaged_model.n_averaged = checkpoint.get('averaged_model_n_averaged', averaged_model.n_averaged)
+    else:
+        averaged_model.update_parameters(model)
+
     opt = torch.optim.AdamW(model.parameters(), train_cfg['lr'], betas=(0.9, 0.9))
 
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt, T_0=8000, eta_min=1e-10)
@@ -95,7 +112,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     loss_func = SSIMLabColorLoss(device)
 
     metrics_logger = MetricsLogger(loss_func, eval_metrics)
-    net_trainer = NNTrainer(loss_func, eval_metrics, net_saver, metrics_logger)
+    net_trainer = NNTrainer(loss_func, eval_metrics, net_saver, metrics_logger, averaged_model)
 
     net_trainer.run(model, opt, train_cfg['epochs'], train_loader, eval_loader, lr_scheduler=lr_scheduler)
 
