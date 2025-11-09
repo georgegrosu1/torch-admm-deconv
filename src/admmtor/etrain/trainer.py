@@ -36,6 +36,10 @@ class NNTrainer:
             train_dataloader: DataLoader,
             eval_dataloader: DataLoader = None,
             lr_scheduler: torch.optim.lr_scheduler.LRScheduler = None):
+        
+        # Run dummy forward to initialize lazy modules
+        dummy_input = torch.randn(1, 3, 64, 64)
+        model(dummy_input)
 
         self.get_model_params(model)
         for epoch in range(epochs):
