@@ -3,9 +3,9 @@ from tqdm import tqdm
 from prettytable import PrettyTable
 from torch.utils.data import DataLoader
 
-from emetrics.metrics import Metric, MSE
-from etrain.saver import NNSaver
-from etrain.logger import MetricsLogger
+from admmtor.emetrics.metrics import Metric, MSE
+from admmtor.etrain.saver import NNSaver
+from admmtor.etrain.logger import MetricsLogger
 
 
 class NNTrainer:
