@@ -38,7 +38,7 @@ class NNTrainer:
             lr_scheduler: torch.optim.lr_scheduler.LRScheduler = None):
         
         # Run dummy forward to initialize lazy modules
-        dummy_input = torch.randn(1, 3, 64, 64)
+        dummy_input = torch.randn(1, 3, 64, 64, device=model.device)
         model(dummy_input)
 
         self.get_model_params(model)
