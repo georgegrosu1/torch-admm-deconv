@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 import pandas as pd
-from utils.train_utils import get_saving_model_path, get_time_formated
+from admmtor.utils.train_utils import get_saving_model_path, get_time_formated
 from typing import Dict
 from enum import Enum
 

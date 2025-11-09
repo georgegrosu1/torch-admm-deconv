@@ -2,9 +2,9 @@ import torch
 import torch.nn as nn
 from typing import Tuple, List
 
-from elayers.admmdeconv import ADMMDeconv
-from elayers.attentions import CBAM
-from elayers.attentionpool import AttentionChannelPooling
+from admmtor.elayers.admmdeconv import ADMMDeconv
+from admmtor.elayers.attentions import CBAM
+from admmtor.elayers.attentionpool import AttentionChannelPooling
 
 
 def same_padding(input_tensor: torch.Tensor, kernel_size: int) -> torch.Tensor:

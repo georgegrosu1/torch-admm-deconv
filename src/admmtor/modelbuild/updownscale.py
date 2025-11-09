@@ -1,4 +1,4 @@
-from modelbuild.blocks import *
+from admmtor.modelbuild.blocks import *
 
 
 class UpDownScale(nn.Module):

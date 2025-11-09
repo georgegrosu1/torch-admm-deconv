@@ -1,28 +1,41 @@
+[build-system]
+requires = ["setuptools>=69.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "torch-admm-deconv"
+name = "admmtor"
 version = "0.1.0"
 description = "ADMM-based deconvolution and restoration algorithms in PyTorch"
-authors = [
-    { name = "georgegrosu1" }
-]
+authors = [{ name = "george.grosu.florin@gmail.com" }]
 readme = "README.md"
 license = { file = "LICENSE" }
-requires-python = "==3.12.5"
+requires-python = ">=3.12,<3.13"
 dependencies = [
-    "torch==2.4.1+cu121",
     "numpy==1.26.4",
-    "scipy==1.14.1",
-    "matplotlib",
-    "tqdm==4.66.5",
     "opencv-python==4.10.0.82",
-    "torchmetrics==1.4.2",
-    "torchvision==0.19.1",
     "pandas==2.2.2",
     "prettytable==3.16.0",
+    "scipy==1.14.1",
+    "torch==2.4.1+cu121",
+    "torchmetrics==1.4.2",
+    "torchvision==0.19.1+cu121",
+    "tqdm==4.66.5",
+    "matplotlib"
 ]
-[tool.setuptools]
-packages = ["elayers", "emetrics", "eops", "eprocessing", "etrain", "modelbuild", "utils"]
 
-[build-system]
-requires = ["setuptools>=61.0", "wheel"]
-build-backend = "setuptools.build_meta"
+[project.optional-dependencies]
+dev = [
+    "ipykernel",
+    "pytest",
+    "ruff"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["admmtor*"]
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.uv]
+extra-index-url = ["https://download.pytorch.org/whl/cu121"]

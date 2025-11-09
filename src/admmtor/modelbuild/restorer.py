@@ -1,8 +1,8 @@
 from typing import Dict
 
-from modelbuild.autoencoder import *
-from modelbuild.deconver import Deconvs
-from modelbuild.updownscale import UpDownScale
+from admmtor.modelbuild.autoencoder import *
+from admmtor.modelbuild.deconver import Deconvs
+from admmtor.modelbuild.updownscale import UpDownScale
 
 
 class Restorer(nn.Module):

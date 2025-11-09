@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 
-from elayers.admmdeconv import ADMMDeconv
-from elayers.cwa import ChannelCompression
-from elayers.attentionpool import AttentionChannelPooling
+from admmtor.elayers.admmdeconv import ADMMDeconv
+from admmtor.elayers.cwa import ChannelCompression
+from admmtor.elayers.attentionpool import AttentionChannelPooling
 
 
 class ADMMFusion(nn.Module):

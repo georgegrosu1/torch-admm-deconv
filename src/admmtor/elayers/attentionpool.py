@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-from elayers.cwa import ChannelWiseAttention, ChannelCompression
+from admmtor.elayers.cwa import ChannelWiseAttention, ChannelCompression
 
 
 class AttentionChannelPooling(nn.Module):

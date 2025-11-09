@@ -65,7 +65,13 @@ class ChannelWiseAttention(nn.Module):
                                stride=1, padding=0, bias=True)
         self.conv2 = nn.Conv2d(in_channels=self.probas_space_size, out_channels=in_channels, kernel_size=1,
                                stride=1, padding=0, bias=True)
+        
+        self.ca1 = nn.LazyLinear(self.probas_space_size * len(channel_compress_methods), bias=True)
+        self.ca2 = nn.ModuleList([nn.LazyConv1d(self.probas_space_size, kernel_size=self.probas_space_size, bias=True) for _ in range(len(channel_compress_methods))])
+        self.ca3 = nn.LazyLinear(in_channels, bias=True)
+        
         self.compress_methods = channel_compress_methods
+        
         self.compress_weight = nn.ParameterList()
         for _ in range(len(channel_compress_methods)):
             self.compress_weight.append(nn.Parameter(torch.ones((1,)), requires_grad=True))
@@ -79,6 +85,12 @@ class ChannelWiseAttention(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         weighted_compress = self._get_compressed_vals(x)
+        
+        # Apply ca1 ca2 ca3
+        ca_out = self.ca1(weighted_compress.reshape(x.shape[0], x.shape[1]))
+        ca_out = [self.ca2[i](ca_out[:, i].reshape(x.shape[0], 1, -1)).reshape(x.shape[0], -1) for i in range(len(self.compress_methods))]
+        ca_out = self.ca3(ca_out)
+        
         if self.probas_only:
             out = self.prob_func(self.conv2(self.conv1(x)) * weighted_compress)
         else:

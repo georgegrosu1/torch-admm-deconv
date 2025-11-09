@@ -1,6 +1,6 @@
 import torch
 from typing import Tuple, Callable
-from eops.deconv import identity, fft_admm_tv
+from admmtor.eops.deconv import identity, fft_admm_tv
 
 
 class ADMMDeconv(torch.nn.Module):
