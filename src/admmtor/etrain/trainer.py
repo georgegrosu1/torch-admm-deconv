@@ -101,7 +101,7 @@ class NNTrainer:
         model.eval()
 
         print('\n [ EVALUATING ]')
-        with torch.no_grad():
+        with torch.inference_mode():
             for batch_idx, (inputs, labels) in tqdm(enumerate(eval_dataloader), total=len(eval_dataloader)):
                 outputs = model(inputs)
                 vloss = self.loss(outputs, labels)
