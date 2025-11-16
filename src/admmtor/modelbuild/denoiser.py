@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from admmtor.modelbuild.blocks import DivergentAttention
 from admmtor.elayers.cwa import ChannelWiseAttention
-from admmtor.elayers.sra import ParallelUpsampleReduce
+from admmtor.elayers.local_attention_patch import LocalAttentionPatch
 
 
 class DivergentRestorer(nn.Module):
@@ -20,6 +20,8 @@ class DivergentRestorer(nn.Module):
 
         num_levels = len(level_branches)
         self._level_branches = level_branches
+        self.lap1 = LocalAttentionPatch(patch_size=32, stride=32, num_processors=64, channels=filters, downscale_kernel=3, downscale_stride=2)
+        self.lap2 = LocalAttentionPatch(patch_size=32, stride=32, num_processors=64, channels=filters, downscale_kernel=3, downscale_stride=2)
 
         self.blocks = nn.ModuleList()
         self.scas = nn.ModuleList()
@@ -54,6 +56,7 @@ class DivergentRestorer(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.blocks[0](x)
         out = self.scas[0](out)
+        out = self.lap1(out)
         for i in range(1, len(self.blocks)):
             if i < len(self.blocks) - 1:
                 out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
@@ -61,4 +64,5 @@ class DivergentRestorer(nn.Module):
             else:
                 out = self.scas[i](out)
                 out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
+                out = self.lap2(out)
         return out
