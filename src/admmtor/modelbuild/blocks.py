@@ -219,12 +219,15 @@ class UpDownBlock(nn.Module):
                                         padding=0, bias=False)
         self.chc2 = nn.Conv2d(in_channels=down_out_ch, out_channels=down_out_ch, kernel_size=1, stride=1,
                              padding=0, bias=False)
+        self.chx = nn.Conv2d(in_channels=up_in_ch, out_channels=down_out_ch, kernel_size=1, stride=1,
+                                        padding=0, bias=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        res = self.chx(x)
         x = self.up_block(x)
         x = self.chc(x)
         x = self.down_block(x)
-        return self.chc2(x)
+        return res + self.chc2(x)
 
 
 class MultiScaleConvPool(nn.Module):

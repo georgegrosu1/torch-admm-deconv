@@ -39,7 +39,11 @@ class PatchProcessor(nn.Module):
             stride=downscale_stride,
         )
         self.linear = nn.LazyLinear(out_features=channels * features_multiplier)
-        self.conv1d = nn.LazyConv1d(out_channels=channels, kernel_size=features_multiplier)
+        self.conv1d_a_1 = nn.LazyConv1d(out_channels=channels, kernel_size=features_multiplier)
+        self.conv1d_a_2 = nn.LazyConv1d(out_channels=channels, kernel_size=1, bias=True)
+        self.conv2d_b_1 = nn.LazyConvTranspose2d(out_channels=channels, kernel_size=5, bias=True)
+        self.conv2d_b_2 = nn.LazyConv2d(out_channels=channels, kernel_size=1, bias=True)
+        self.conv2d_b_3 = nn.LazyConv2d(out_channels=channels, kernel_size=5, bias=True)
         self.activation = nn.Sigmoid()
 
     def forward(self, patch: torch.Tensor) -> torch.Tensor:
@@ -47,9 +51,14 @@ class PatchProcessor(nn.Module):
         processed = self.downscale(patch)
         flat = processed.view(batch, -1)
         gated = self.linear(flat)
-        gated = self.conv1d(gated.view(batch, -1, self.features_multiplier))
+        gated = self.conv1d_a_1(gated.view(batch, -1, self.features_multiplier))
+        gated = self.conv1d_a_2(gated)
         gated = self.activation(gated).view(batch, channels, 1, 1)
-        return patch + gated.expand(-1, -1, height, width)
+
+        res = self.conv2d_b_1(patch)
+        res = self.conv2d_b_2(res)
+        res = self.conv2d_b_3(res)
+        return patch + res * gated.expand(-1, -1, height, width)
 
 
 class LocalAttentionPatch(nn.Module):

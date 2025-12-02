@@ -152,7 +152,7 @@ class PSNRLoss(Metric):
 class SSIMLabColorLoss(Metric):
     m_name = 'color_lab_loss'
 
-    def __init__(self, device: str='cuda', ssim_weight=1.2, color_weight_ab=0.9, color_weight_l=0.3, reduction='mean'):
+    def __init__(self, device: str='cuda', ssim_weight=1.3, color_weight_ab=0.9, color_weight_l=0.3, reduction='mean'):
         super(SSIMLabColorLoss, self).__init__(device)
         self.ssim_weight = ssim_weight
         self.color_weight_ab = color_weight_ab
