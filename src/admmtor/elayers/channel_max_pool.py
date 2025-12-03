@@ -23,8 +23,14 @@ class ChannelMaxPool(nn.Module):
             (non-differentiable); however, the scaling is differentiable with respect to the input scores.
     """
 
-    def __init__(self, top_k: int, soft: bool = False, temperature: float = 1.0, normalize_weights: bool = True,
-                 differentiable: bool = False, in_channels: int | None = None):
+    def __init__(self, 
+                 top_k: int, 
+                 soft: bool = False, 
+                 temperature: float = 1.0, 
+                 normalize_weights: bool = True, 
+                 differentiable: bool = False, 
+                 in_channels: int | None = None,
+                 const: float = 1e-12):
         super(ChannelMaxPool, self).__init__()
         if top_k < 1:
             raise ValueError("top_k must be >= 1")
@@ -61,7 +67,7 @@ class ChannelMaxPool(nn.Module):
 
         B, C, H, W = x.shape
 
-        if self.top_k >= C and not self.differentiable:
+        if self.top_k >= C:
             # If we ask for >= number of channels just return the input
             # Note: in soft mode we would still return the original input (no scaling) for now to preserve
             # a consistent return shape (B, C, H, W) in this degenerate case.
@@ -78,7 +84,7 @@ class ChannelMaxPool(nn.Module):
             # weights_param shape: (K, C)
             # scores shape: (B, C) -> expand to (B, K, C) for elementwise multiplication
             logits = scores.unsqueeze(1) * self.weights_param.unsqueeze(0)
-            logits = logits / (self.temperature + 1e-12)
+            logits = logits / (self.temperature + self.const)
             weights = torch.softmax(logits, dim=-1)  # (B, K, C)
 
             # Combine channels via weighted sum -> output (B, K, H, W)
@@ -97,13 +103,13 @@ class ChannelMaxPool(nn.Module):
 
         if self.soft:
             # Compute softmax probabilities for channel scores (differentiable)
-            probs = torch.softmax(scores / (self.temperature + 1e-12), dim=1)
+            probs = torch.softmax(scores / (self.temperature + self.const), dim=1)
 
             # Gather the probabilities corresponding to the selected top-K indices
             selected_probs = torch.gather(probs, dim=1, index=topk_indices)
 
             if self.normalize_weights:
-                denom = selected_probs.sum(dim=1, keepdim=True).clamp_min(1e-12)
+                denom = selected_probs.sum(dim=1, keepdim=True).clamp_min(self.const)
                 selected_probs = selected_probs / denom
 
             # Expand weights to spatial dims and scale selected channels
