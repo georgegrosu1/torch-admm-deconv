@@ -3,32 +3,24 @@ import cv2
 import json
 import random
 import argparse
+import numpy as np
 from pathlib import Path
 
-import torch
-import torchvision
-import numpy as np
+from admmtor.eprocessing.dataload import ImageDataset
+from admmtor.modelbuild.denoiser import DivergentRestorer
+from admmtor.modelbuild.nafnet import NAFNet
 
-from eprocessing.dataload import ImageDataset
-
-from modelbuild.restorer import Restorer
-from modelbuild.updownscale import UpDownScale
-from modelbuild.denoiser import DivergentRestorer
-
-from eprocessing.etransforms import Scale, RandCrop, AddAWGN
-from etrain.trainer import NNTrainer
-from etrain.logger import MetricsLogger
-from etrain.saver import NNSaver
-from emetrics.metrics import *
-
+from admmtor.eprocessing.etransforms import Scale, RandCrop, AddAWGN
+from admmtor.etrain.trainer import NNTrainer
+from admmtor.etrain.logger import MetricsLogger
+from admmtor.etrain.saver import NNSaver
+from admmtor.emetrics.metrics import *
 
 DECONV1 = {'kern_size': (),
          'max_iters': 100,
-         'lmbda': 0.02,
          'iso': True}
 DECONV2 = {'kern_size': (),
          'max_iters': 100,
-         'rho': 0.004,
          'iso': True}
 
 
@@ -69,30 +61,37 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
                               transforms=transforms)
     eval_dset = ImageDataset(Path(train_cfg['eval']['x_path']), Path(train_cfg['eval']['y_path']), device=device,
                              transforms=transforms)
-    train_loader = torch.utils.data.DataLoader(train_dset, shuffle=True, batch_size=train_cfg['batch_size'])
-    eval_loader = torch.utils.data.DataLoader(eval_dset, shuffle=True, batch_size=train_cfg['batch_size'])
+    train_loader = torch.utils.data.DataLoader(train_dset, shuffle=True, batch_size=train_cfg['train']['batch_size'])
+    eval_loader = torch.utils.data.DataLoader(eval_dset, shuffle=True, batch_size=train_cfg['eval']['batch_size'])
 
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
 
-    model = DivergentRestorer(3, 2, 3,
-                              3, 4, 128,
-                              128, 8,
-                               output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
+    model = DivergentRestorer([2, 8, 32], 3,
+                              3, 86,
+                              86, 8,
+                              output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
+
+    if train_cfg['train']['ckpt'] is not None:
+        print("!!!!! LOADING CKPT !!!!!!!")
+        checkpoint = torch.load(train_cfg['train']['ckpt'], weights_only=False, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        # Freeze all
+        # print('WITH FROZEN!!!!')
+        # for param in entry_model.parameters():
+        #     param.requires_grad = False
+
+    # model = NAFNet(img_channel=3, width=64, middle_blk_num=12,
+    #                enc_blk_nums=[2, 2, 4, 8], dec_blk_nums=[2, 2, 2, 2])
     # clipper = WeightClipper()
     # model.apply(clipper)
     model = model.to(device)
-    opt = torch.optim.Adam(model.parameters(), train_cfg['lr'])
+    opt = torch.optim.AdamW(model.parameters(), train_cfg['lr'], betas=(0.9, 0.9))
 
-    if model_ckpt:
-        checkpoint = torch.load(model_ckpt, weights_only=False, map_location=device)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        opt.load_state_dict(checkpoint['optimizer_state_dict'])
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt, T_0=15000, eta_min=1e-11)
 
-    lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(opt, gamma=0.95)
-
-    eval_metrics = [PSNRMetric(device), SCCMetric(device), SSIMMetric(device), MAELoss(device)]
-    loss_func = SSIMLoss(device)
+    eval_metrics = [PSNRMetric(device), SCCMetric(device), SSIMMetric(device), MAELoss(device), UIQMetric(device)]
+    loss_func = SSIMLabColorLoss(device)
 
     metrics_logger = MetricsLogger(loss_func, eval_metrics)
     net_trainer = NNTrainer(loss_func, eval_metrics, net_saver, metrics_logger)
@@ -116,12 +115,9 @@ def main():
                              default=r'image_restorer')
     args_parser.add_argument('--device', '-d', type=str, help='Training device (cuda | cpu)',
                             default='cuda')
-    args_parser.add_argument('--model_ckpt', '-k', type=str, help='Path to model checkpoint',
-                             default=None)
     args = args_parser.parse_args()
 
-    init_training(args.config_file, args.min_awgn, args.max_awgn, args.save_dir, args.model_name, args.device,
-                  args.model_ckpt)
+    init_training(args.config_file, args.min_awgn, args.max_awgn, args.save_dir, args.model_name, args.device)
 
 
 if __name__ == "__main__":

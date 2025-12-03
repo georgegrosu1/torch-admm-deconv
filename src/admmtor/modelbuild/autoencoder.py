@@ -1,6 +1,6 @@
 from typing import List
 
-from modelbuild.blocks import *
+from admmtor.modelbuild.blocks import *
 
 
 class AEModule(nn.Module):

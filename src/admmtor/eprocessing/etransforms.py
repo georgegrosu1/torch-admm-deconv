@@ -47,7 +47,7 @@ class AddAWGN(object):
 
     def __call__(self, x_img, y_img):
         std = torch.randint(self.std_range[0], self.std_range[1], (1,)).item() / 255.0
-        awgn = torch.clamp(torch.randn(x_img.shape).to(x_img.device) * std + self.mean, self.minval, self.maxval)
+        awgn = torch.randn(x_img.shape).to(x_img.device) * std + self.mean
         if self.both:
             return torch.clamp(x_img + awgn, self.minval, self.maxval), torch.clamp(y_img + awgn, self.minval, self.maxval)
         return torch.clamp(x_img + awgn, self.minval, self.maxval), y_img

@@ -3,9 +3,9 @@ from tqdm import tqdm
 from prettytable import PrettyTable
 from torch.utils.data import DataLoader
 
-from emetrics.metrics import Metric, MSE
-from etrain.saver import NNSaver
-from etrain.logger import MetricsLogger
+from admmtor.emetrics.metrics import Metric, MSE
+from admmtor.etrain.saver import NNSaver
+from admmtor.etrain.logger import MetricsLogger
 
 
 class NNTrainer:
@@ -36,6 +36,10 @@ class NNTrainer:
             train_dataloader: DataLoader,
             eval_dataloader: DataLoader = None,
             lr_scheduler: torch.optim.lr_scheduler.LRScheduler = None):
+        
+        # Run dummy forward to initialize lazy modules
+        dummy_input = torch.randn(next(iter(train_dataloader))[0].shape, device=next(model.parameters()).device)
+        model(dummy_input)
 
         self.get_model_params(model)
         for epoch in range(epochs):
@@ -97,7 +101,7 @@ class NNTrainer:
         model.eval()
 
         print('\n [ EVALUATING ]')
-        with torch.no_grad():
+        with torch.inference_mode():
             for batch_idx, (inputs, labels) in tqdm(enumerate(eval_dataloader), total=len(eval_dataloader)):
                 outputs = model(inputs)
                 vloss = self.loss(outputs, labels)

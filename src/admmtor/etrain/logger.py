@@ -1,6 +1,6 @@
 import numpy as np
 
-from emetrics.metrics import Metric, MSE
+from admmtor.emetrics.metrics import Metric, MSE
 
 
 def psnr_compute(mse: float, max_val: float = 1.0):

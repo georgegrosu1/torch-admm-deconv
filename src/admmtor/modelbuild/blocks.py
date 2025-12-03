@@ -2,8 +2,25 @@ import torch
 import torch.nn as nn
 from typing import Tuple, List
 
-from elayers.admmdeconv import ADMMDeconv
-from elayers.attentions import CBAM
+from admmtor.elayers.admmdeconv import ADMMDeconv
+from admmtor.elayers.attentions import CBAM
+from admmtor.elayers.attentionpool import AttentionChannelPooling
+
+
+def same_padding(input_tensor: torch.Tensor, kernel_size: int) -> torch.Tensor:
+    if isinstance(kernel_size, int):
+        kernel_size = (kernel_size, kernel_size)
+
+    padding_h = (kernel_size[0] - 1) // 2
+    padding_w = (kernel_size[1] - 1) // 2
+
+    # Calculate total padding, assuming odd kernel sizes
+    total_padding = (padding_w, padding_w, padding_h, padding_h)
+
+    # Pad the tensor
+    padded_tensor = nn.functional.pad(input_tensor, total_padding, mode='reflect')
+
+    return padded_tensor
 
 
 def compute_residual_dec_input_channels(enc_out_channels: List[int], dec_out_channels: List[int]) -> List[int]:
@@ -98,6 +115,46 @@ def conv2d_pooling_output_shape(
     return out_height, out_width
 
 
+class LayerNormFunction(torch.autograd.Function):
+
+    @staticmethod
+    def forward(ctx, x, weight, bias, eps):
+        ctx.eps = eps
+        N, C, H, W = x.size()
+        mu = x.mean(1, keepdim=True)
+        var = (x - mu).pow(2).mean(1, keepdim=True)
+        y = (x - mu) / (var + eps).sqrt()
+        ctx.save_for_backward(y, var, weight)
+        y = weight.view(1, C, 1, 1) * y + bias.view(1, C, 1, 1)
+        return y
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        eps = ctx.eps
+
+        N, C, H, W = grad_output.size()
+        y, var, weight = ctx.saved_variables
+        g = grad_output * weight.view(1, C, 1, 1)
+        mean_g = g.mean(dim=1, keepdim=True)
+
+        mean_gy = (g * y).mean(dim=1, keepdim=True)
+        gx = 1. / torch.sqrt(var + eps) * (g - y * mean_gy - mean_g)
+        return gx, (grad_output * y).sum(dim=3).sum(dim=2).sum(dim=0), grad_output.sum(dim=3).sum(dim=2).sum(
+            dim=0), None
+
+
+class LayerNorm2d(nn.Module):
+
+    def __init__(self, channels, eps=1e-6):
+        super(LayerNorm2d, self).__init__()
+        self.register_parameter('weight', nn.Parameter(torch.ones(channels)))
+        self.register_parameter('bias', nn.Parameter(torch.zeros(channels)))
+        self.eps = eps
+
+    def forward(self, x):
+        return LayerNormFunction.apply(x, self.weight, self.bias, self.eps)
+
+
 class DivergentAttention(nn.Module):
     def __init__(self,
                  branches: int,
@@ -107,8 +164,7 @@ class DivergentAttention(nn.Module):
                  gate_channels: int,
                  attention_reduction: int,
                  out_activation: nn.Module = None,
-                 admms: list[dict] = None,
-                 use_varmap: bool = False):
+                 admms: list[dict] = None):
         super(DivergentAttention, self).__init__()
 
         if admms is not None:
@@ -119,13 +175,15 @@ class DivergentAttention(nn.Module):
         self.out_activation = out_activation if out_activation is not None else nn.Identity()
         self.convs = nn.ModuleList()
         self.attentions = nn.ModuleList()
-        self.convout = nn.Conv2d(in_channels=conv_filters*branches+in_channels, out_channels=out_channels,
+        self.convout = nn.Conv2d(in_channels=conv_filters*branches, out_channels=out_channels,
                                  kernel_size=1, stride=1, padding=0, bias=True)
         for i in range(branches):
             self.convs.append(nn.Conv2d(in_channels=in_channels, out_channels=conv_filters, kernel_size=1, stride=1,
                                         padding=0, bias=True))
+            self.convs.append(UpDownBlock(up_in_ch=in_channels, up_out_ch=in_channels, down_out_ch=conv_filters,
+                                          kernel_size=3))
             self.attentions.append(CBAM(gate_channels=gate_channels, reduction_ratio=attention_reduction,
-                                        pool_types=self._pool_types[i%2], use_spatial=True, use_varmap=use_varmap))
+                                        pool_types=self._pool_types[i%2], use_spatial=True))
             if admms is not None:
                 self.admms.append(ADMMDeconv(**admms[i]))
 
@@ -133,7 +191,7 @@ class DivergentAttention(nn.Module):
             default_init_weights(conv)
         default_init_weights(self.convout)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
         if self.admms is not None:
             outs = [conv(admm(x)) for conv, admm in zip(self.convs, self.admms)]
         else:
@@ -142,11 +200,11 @@ class DivergentAttention(nn.Module):
                                     zip(self.attentions[:len(self.attentions) // 2], outs[:len(outs) // 2])], dim=1)
         outs_b = torch.cat(tensors=[attention(feat) + feat for attention, feat in
                                     zip(self.attentions[len(self.attentions) // 2:], outs[len(outs) // 2:])], dim=1)
-        outs = torch.cat([outs_a * outs_b, outs_a + outs_b, x], dim=1)
+        outs = torch.cat([outs_a * outs_b, outs_a + outs_b], dim=1)
         return self.out_activation(self.convout(outs))
 
 
-class UpDownBock(nn.Module):
+class UpDownBlock(nn.Module):
     def __init__(self,
                  up_in_ch: int, up_out_ch: int,
                  down_out_ch: int,
@@ -154,16 +212,53 @@ class UpDownBock(nn.Module):
                  activation: nn.Module = None,
                  normalization: nn.Module = None,
                  pool_size: int = 0):
-        super(UpDownBock, self).__init__()
+        super(UpDownBlock, self).__init__()
         self.up_block = UpBlock(up_in_ch, up_out_ch, kernel_size, normalization, activation, pool_size)
-        self.down_block = DownBlock(up_out_ch, down_out_ch, kernel_size,normalization,  activation, pool_size)
-        self.cbam = CBAM(down_out_ch, reduction_ratio=2, pool_types=('avg', 'max', 'lp', 'lse'), use_spatial=True)
+        self.down_block = DownBlock(up_out_ch, down_out_ch, kernel_size, normalization, activation, pool_size)
+        self.chc = nn.Conv2d(in_channels=up_out_ch, out_channels=up_out_ch, kernel_size=1, stride=1,
+                                        padding=0, bias=False)
+        self.chc2 = nn.Conv2d(in_channels=down_out_ch, out_channels=down_out_ch, kernel_size=1, stride=1,
+                             padding=0, bias=False)
+        self.chx = nn.Conv2d(in_channels=up_in_ch, out_channels=down_out_ch, kernel_size=1, stride=1,
+                                        padding=0, bias=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        res = self.chx(x)
         x = self.up_block(x)
+        x = self.chc(x)
         x = self.down_block(x)
-        x = self.cbam(x)
-        return x
+        return res + self.chc2(x)
+
+
+class MultiScaleConvPool(nn.Module):
+    def __init__(self,
+                 in_channels: int,
+                 out_channels: int,
+                 filters: int,
+                 ks: list[int]):
+        super(MultiScaleConvPool, self).__init__()
+        self.convs = nn.ModuleList()
+        self.ks = ks
+        for i in range(len(ks)):
+            self.convs.append(nn.Conv2d(in_channels=in_channels, out_channels=filters, kernel_size=ks[i], stride=1,
+                                        bias=True))
+        self.cwa_pool = AttentionChannelPooling(in_channels=filters * len(ks), select_channels=out_channels)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = torch.cat([conv(same_padding(x, ks)) for conv, ks in zip(self.convs, self.ks)], dim=1)
+        return self.cwa_pool(x)
+
+
+class MultiADMM(nn.Module):
+    def __init__(self,
+                 admm_dicts: list[dict]):
+        super(MultiADMM, self).__init__()
+        self.admms = nn.ModuleList()
+        for admm_dict in admm_dicts:
+            self.admms.append(ADMMDeconv(**admm_dict))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return torch.cat([admm_l(x) for admm_l in self.admms], dim=1)
 
 
 class DownBlock(nn.Module):
@@ -177,13 +272,12 @@ class DownBlock(nn.Module):
         super(DownBlock, self).__init__()
         kernel_size = kernel_size if isinstance(kernel_size, tuple) else (kernel_size, kernel_size)
         self.down_conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
-                                   stride=1, padding=max(0, pool_size-1), padding_mode='zeros', bias=True)
+                                   stride=1, padding=max(0, pool_size-1), padding_mode='zeros', bias=False)
         default_init_weights(self.down_conv)
 
         self.normalization = normalization
         self.activation = activation
         self.max_pool = nn.MaxPool2d(kernel_size=pool_size, stride=1) if pool_size != 0 else None
-        self.cbam = CBAM(out_channels, reduction_ratio=2, pool_types=('avg', 'max', 'lp', 'lse'), use_spatial=True)
 
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -191,7 +285,6 @@ class DownBlock(nn.Module):
         x = self.normalization(x) if self.normalization is not None else x
         x = self.activation(x) if self.activation is not None else x
         x = self.max_pool(x) if self.max_pool is not None else x
-        x = self.cbam(x)
         return x
 
 
@@ -206,13 +299,12 @@ class UpBlock(nn.Module):
         super(UpBlock, self).__init__()
 
         self.up_conv = nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
-                                          stride=1, bias=True)
+                                          stride=1, bias=False)
         default_init_weights(self.up_conv)
 
         self.normalization = normalization
         self.max_pool = nn.MaxPool2d(kernel_size=pool_size, stride=1) if pool_size != 0 else None
         self.activation = activation
-        self.cbam = CBAM(out_channels, reduction_ratio=2, pool_types=('avg', 'max', 'lp', 'lse'), use_spatial=True)
 
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -220,7 +312,6 @@ class UpBlock(nn.Module):
         x = self.normalization(x) if self.normalization is not None else x
         x = self.activation(x) if self.activation is not None else x
         x = self.max_pool(x) if self.max_pool is not None else x
-        x = self.cbam(x)
         return x
 
 
