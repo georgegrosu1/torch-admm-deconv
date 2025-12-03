@@ -7,7 +7,6 @@ from torchmetrics.image import (StructuralSimilarityIndexMeasure,
                                 UniversalImageQualityIndex,
                                 SpatialCorrelationCoefficient)
 from torchmetrics.regression import MeanSquaredError
-from torchvision.transforms.functional import rgb_to_grayscale
 from kornia.color import rgb_to_lab as kornia_rgb_to_lab
 
 
