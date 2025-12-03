@@ -23,14 +23,29 @@ class ChannelMaxPool(nn.Module):
             (non-differentiable); however, the scaling is differentiable with respect to the input scores.
     """
 
-    def __init__(self, top_k: int, soft: bool = False, temperature: float = 1.0, normalize_weights: bool = True):
+    def __init__(self, top_k: int, soft: bool = False, temperature: float = 1.0, normalize_weights: bool = True,
+                 differentiable: bool = False, in_channels: int | None = None):
         super(ChannelMaxPool, self).__init__()
         if top_k < 1:
             raise ValueError("top_k must be >= 1")
-        self.top_k = top_k
-        self.soft = soft
-        self.temperature = temperature
-        self.normalize_weights = normalize_weights
+        self.top_k = int(top_k)
+        self.soft = bool(soft)
+        self.temperature = float(temperature)
+        self.normalize_weights = bool(normalize_weights)
+        self.differentiable = bool(differentiable)
+        self.in_channels = in_channels
+
+        # If differentiable mode is active we need weights for each head (K) over channels (C)
+        if self.differentiable:
+            if self.in_channels is None:
+                raise ValueError("in_channels must be provided when differentiable=True")
+            C = int(self.in_channels)
+            K = int(self.top_k)
+            # Parameter shape (K, C) used to compute attention logits per head
+            self.weights_param = nn.Parameter(torch.empty(K, C))
+            nn.init.xavier_uniform_(self.weights_param)
+        else:
+            self.register_parameter('weights_param', None)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass.
@@ -46,7 +61,7 @@ class ChannelMaxPool(nn.Module):
 
         B, C, H, W = x.shape
 
-        if self.top_k >= C:
+        if self.top_k >= C and not self.differentiable:
             # If we ask for >= number of channels just return the input
             # Note: in soft mode we would still return the original input (no scaling) for now to preserve
             # a consistent return shape (B, C, H, W) in this degenerate case.
@@ -55,6 +70,21 @@ class ChannelMaxPool(nn.Module):
         # Compute per-sample per-channel score: maximum absolute activation over spatial dims
         # Shape: (B, C)
         scores = x.abs().view(B, C, -1).max(dim=2).values
+
+        if self.differentiable:
+            # Differentiable relaxed top-K: we compute per-head logits over channels using
+            # element-wise product between per-channel scores and a learned per-head parameter
+            # then softmax across channels to create continuous, differentiable weights.
+            # weights_param shape: (K, C)
+            # scores shape: (B, C) -> expand to (B, K, C) for elementwise multiplication
+            logits = scores.unsqueeze(1) * self.weights_param.unsqueeze(0)
+            logits = logits / (self.temperature + 1e-12)
+            weights = torch.softmax(logits, dim=-1)  # (B, K, C)
+
+            # Combine channels via weighted sum -> output (B, K, H, W)
+            # Expand dims: weights (B,K,C,1,1), x (B,1,C,H,W)
+            out = torch.sum(weights.unsqueeze(-1).unsqueeze(-1) * x.unsqueeze(1), dim=2)
+            return out
 
         # Get top-K indices per sample (descending order of score)
         _, topk_indices = torch.topk(scores, self.top_k, dim=1)
