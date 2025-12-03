@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 
-class ChannelMaxPool(nn.Module):
+class ChannelPool(nn.Module):
     """Select the top-K channels per sample using the maximum activation over spatial dims.
 
     Params
@@ -31,7 +31,7 @@ class ChannelMaxPool(nn.Module):
                  differentiable: bool = False, 
                  in_channels: int | None = None,
                  const: float = 1e-12):
-        super(ChannelMaxPool, self).__init__()
+        super(ChannelPool, self).__init__()
         if top_k < 1:
             raise ValueError("top_k must be >= 1")
         self.top_k = int(top_k)
