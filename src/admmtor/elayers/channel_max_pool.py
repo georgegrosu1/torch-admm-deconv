@@ -40,6 +40,7 @@ class ChannelPool(nn.Module):
         self.normalize_weights = bool(normalize_weights)
         self.differentiable = bool(differentiable)
         self.in_channels = in_channels
+        self.const = float(const)
 
         # If differentiable mode is active we need weights for each head (K) over channels (C)
         if self.differentiable:
