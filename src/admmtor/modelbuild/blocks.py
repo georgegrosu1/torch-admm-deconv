@@ -230,24 +230,22 @@ class UpDownBlock(nn.Module):
         return res + self.chc2(x)
 
 
-class MultiScaleConvPool(nn.Module):
+class MultiScaleConv(nn.Module):
     def __init__(self,
-                 in_channels: int,
                  out_channels: int,
-                 filters: int,
                  ks: list[int]):
-        super(MultiScaleConvPool, self).__init__()
+        super(MultiScaleConv, self).__init__()
         self.convs = nn.ModuleList()
         self.ks = ks
         for i in range(len(ks)):
-            self.convs.append(nn.Conv2d(in_channels=in_channels, out_channels=filters, kernel_size=ks[i], stride=1,
-                                        bias=True))
-        self.cwa_pool = AttentionChannelPooling(in_channels=filters * len(ks), select_channels=out_channels)
+            self.convs.append(nn.LazyConv2d(out_channels=out_channels, kernel_size=ks[i], stride=1,
+                                            bias=True))
+        self.conv_out = nn.LazyConv2d(out_channels=out_channels, kernel_size=1, stride=1, bias=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = torch.cat([conv(same_padding(x, ks)) for conv, ks in zip(self.convs, self.ks)], dim=1)
-        return self.cwa_pool(x)
-
+        return self.conv_out(x)
+    
 
 class MultiADMM(nn.Module):
     def __init__(self,
