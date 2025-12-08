@@ -26,9 +26,9 @@ class ChannelPool(nn.Module):
     def __init__(self, 
                  top_k: int, 
                  soft: bool = False, 
-                 temperature: float = 1.0, 
+                 temperature: float = 0.3, 
                  normalize_weights: bool = True, 
-                 differentiable: bool = False, 
+                 differentiable: bool = True, 
                  in_channels: int | None = None,
                  const: float = 1e-12):
         super(ChannelPool, self).__init__()
