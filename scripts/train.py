@@ -8,6 +8,7 @@ from pathlib import Path
 
 from admmtor.eprocessing.dataload import ImageDataset
 from admmtor.modelbuild.denoiser import DivergentRestorer
+from admmtor.modelbuild.denoiser_v2 import DenoiserV2, DenoiserV2Block
 from admmtor.modelbuild.nafnet import NAFNet
 
 from admmtor.eprocessing.etransforms import Scale, RandCrop, AddAWGN
@@ -22,6 +23,98 @@ DECONV1 = {'kern_size': (),
 DECONV2 = {'kern_size': (),
          'max_iters': 100,
          'iso': True}
+MLAP1 = {
+    'patch_sizes':[64], 
+    'strides':[64], 
+    'num_processors':[16], 
+    'in_channels':6,
+    'out_channels':16, 
+    'features_dim_size':1, 
+    'downscale_kernel': 3, 
+    'downscale_stride': 2, 
+    'embedding_dim': 4, 
+    'spatial_kernel': 3,
+    'admms_dicts': [DECONV1, DECONV2]
+}
+
+MLAP2 = {
+    'patch_sizes':[128], 
+    'strides':[128], 
+    'num_processors':[4], 
+    'in_channels':35,
+    'out_channels':32, 
+    'features_dim_size':2, 
+    'downscale_kernel': 3, 
+    'downscale_stride': 2, 
+    'embedding_dim': 16, 
+    'spatial_kernel': 3
+}
+
+MLAP3 = {
+    'patch_sizes':[64, 32], 
+    'strides':[64, 32], 
+    'num_processors':[16, 64], 
+    'in_channels':35,
+    'out_channels':32, 
+    'features_dim_size':3, 
+    'downscale_kernel': 3, 
+    'downscale_stride': 2, 
+    'embedding_dim': 8, 
+    'spatial_kernel': 3
+}
+
+MLAP4 = {
+    'patch_sizes':[32], 
+    'strides':[32], 
+    'num_processors':[64], 
+    'in_channels':35,
+    'out_channels':64, 
+    'features_dim_size':3, 
+    'downscale_kernel': 2, 
+    'downscale_stride': 2, 
+    'embedding_dim': 16, 
+    'spatial_kernel': 5
+}
+
+MLAP5 = {
+    'patch_sizes':[32, 64], 
+    'strides':[32, 64], 
+    'num_processors':[64, 16], 
+    'in_channels':67,
+    'out_channels':3, 
+    'features_dim_size':3, 
+    'downscale_kernel': 2, 
+    'downscale_stride': 2, 
+    'embedding_dim': 16, 
+    'spatial_kernel': 5
+}
+
+MLAP6 = {
+    'patch_sizes':[32], 
+    'strides':[32], 
+    'num_processors':[64], 
+    'in_channels':67,
+    'out_channels':32, 
+    'features_dim_size':3, 
+    'downscale_kernel': 2, 
+    'downscale_stride': 2, 
+    'embedding_dim': 8, 
+    'spatial_kernel': 5
+}
+
+MLAP7 = {
+    'patch_sizes':[32], 
+    'strides':[32], 
+    'num_processors':[64], 
+    'in_channels':35,
+    'out_channels':3, 
+    'features_dim_size':3, 
+    'downscale_kernel': 5, 
+    'downscale_stride': 2, 
+    'embedding_dim': 8, 
+    'spatial_kernel': 3
+}
+
 
 
 class WeightClipper(object):
@@ -66,11 +159,13 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
 
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
+    
+    model = DenoiserV2(blocks_config=[MLAP1, MLAP2, MLAP3, MLAP4, MLAP5])
 
-    model = DivergentRestorer([2, 8, 32], 3,
-                              3, 86,
-                              86, 8,
-                              output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
+    # model = DivergentRestorer([2, 8, 32], 3,
+    #                           3, 86,
+    #                           86, 8,
+    #                           output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
 
     if train_cfg['train']['ckpt'] is not None:
         print("!!!!! LOADING CKPT !!!!!!!")

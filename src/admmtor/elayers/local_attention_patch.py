@@ -6,6 +6,27 @@ import torch.nn.functional as F
 from admmtor.elayers.channel_pool import ChannelPool
 
 
+class AbsLPPool2d(nn.Module):
+    """LPPool2d wrapper that takes absolute values before pooling.
+
+    This avoids NaNs that may arise from negative intermediate sums when the
+    implementation computes x.pow(p).sum() followed by pow(sum, 1.0/p).
+    Using `abs` guarantees the inner quantity is non-negative and prevents
+    numerical NaNs for odd `p` values.
+    """
+
+    def __init__(self, norm_type: int = 2, kernel_size=1, stride=None, ceil_mode: bool = False, cons: float = 1e-12):
+        super().__init__()
+        self.norm_type = norm_type
+        self.kernel_size = kernel_size
+        self.stride = stride
+        self.ceil_mode = ceil_mode
+        self.cons = cons
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return F.lp_pool2d(x.abs() + self.cons, self.norm_type, self.kernel_size, self.stride, self.ceil_mode)
+
+
 class PatchProcessor(nn.Module):
     """Applies a learnable residual gate to a flattened patch."""
 
@@ -38,6 +59,8 @@ class PatchProcessor(nn.Module):
         # Build downscale and encoder
         if self.in_channels != out_channels:
             self._init_channel_adapt()
+        else:
+            self.channel_adapt = nn.Identity()
         if in_channels is None:
             self.in_channels = out_channels
         self._init_downscale()
@@ -71,12 +94,12 @@ class PatchProcessor(nn.Module):
                 bias=True,
             ),
             nn.LazyConv2d(
-                out_channels=self.features_dim_size,
+                out_channels=self.out_channels,
                 kernel_size=self.downscale_kernel,
                 stride=self.downscale_stride,
                 bias=False,
             ),
-            nn.LPPool2d(norm_type=3, kernel_size=self.downscale_kernel, stride=self.downscale_stride),
+            AbsLPPool2d(norm_type=3, kernel_size=self.downscale_kernel, stride=self.downscale_stride),
         )
         
     def _init_encoder(self) -> None:
@@ -115,17 +138,17 @@ class PatchProcessor(nn.Module):
         processed = self.downscale(patch)
         flat = self.encoder(processed)
         gated = self.activation(flat).view(batch, channels, 1, 1)
-        return nn.functional.sigmoid(self.alfa_w.view(1, -1, 1, 1)) * gated.expand(-1, -1, height, width)
+        return self.activation(self.alfa_w.view(1, -1, 1, 1) * gated.expand(-1, -1, height, width))
     
     def forward_spatial(self, patch: torch.Tensor) -> torch.Tensor:
         spatial_out = self.spatial(patch)
-        return nn.functional.sigmoid(self.beta_w.view(1, -1, 1, 1)) * spatial_out
+        return self.activation(self.beta_w.view(1, -1, 1, 1) * spatial_out)
     
     def forward(self, patch: torch.Tensor) -> torch.Tensor:
-        _, channels, _, _ = patch.shape
-        if channels != self.out_channels:
-            patch = self.channel_adapt(patch)
-        return patch * (self.forward_global(patch) + self.forward_spatial(patch))
+        patch = self.channel_adapt(patch)
+        glob = self.forward_global(patch)
+        spatial = self.forward_spatial(patch)
+        return patch * (glob + spatial)
 
 
 class LocalAttentionPatch(nn.Module):
@@ -236,7 +259,7 @@ class MultiLAP(nn.Module):
         downscale_stride: int | tuple[int, int] = 1,
         embedding_dim: int = 64,
         spatial_kernel: int = 7,
-        keep_out_channels: bool = False,
+        keep_out_channels: bool = True,
     ) -> None:
         super().__init__()
 
@@ -270,7 +293,7 @@ class MultiLAP(nn.Module):
                     patch_size=patch_size,
                     stride=stride,
                     num_processors=num_processor,
-                    unit_out_channels=unit_out_channels,
+                    out_channels=unit_out_channels,
                     in_channels=in_channels,
                     features_dim_size=features_dim_size,
                     downscale_kernel=downscale_kernel,
