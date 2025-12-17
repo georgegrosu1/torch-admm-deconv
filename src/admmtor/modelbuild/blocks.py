@@ -1,13 +1,26 @@
 import torch
 import torch.nn as nn
-from typing import Tuple, List
 
 from admmtor.elayers.admmdeconv import ADMMDeconv
 from admmtor.elayers.attentions import CBAM
-from admmtor.elayers.attentionpool import AttentionChannelPooling
+from admmtor.elayers.channel_pool import ChannelPool
+from admmtor.elayers.local_attention_patch import (
+    LocalAttentionPatch, 
+    MultiLAP
+)
 
 
-def same_padding(input_tensor: torch.Tensor, kernel_size: int) -> torch.Tensor:
+@torch.no_grad()
+def default_init_weights(nn_modules: nn.Module | list[nn.Module]):
+    nn_modules = nn_modules if isinstance(nn_modules, list) else [nn_modules]
+    for nn_module in nn_modules:
+        if isinstance(nn_module, nn.Conv2d) or isinstance(nn_module, nn.ConvTranspose2d):
+            nn.init.xavier_normal_(nn_module.weight)
+            if nn_module.bias is not None:
+                nn_module.bias.data.fill_(0)
+
+
+def same_padding(kernel_size: int) -> tuple[int, int]:
     if isinstance(kernel_size, int):
         kernel_size = (kernel_size, kernel_size)
 
@@ -15,22 +28,19 @@ def same_padding(input_tensor: torch.Tensor, kernel_size: int) -> torch.Tensor:
     padding_w = (kernel_size[1] - 1) // 2
 
     # Calculate total padding, assuming odd kernel sizes
-    total_padding = (padding_w, padding_w, padding_h, padding_h)
+    total_padding = (padding_w, padding_h)
 
-    # Pad the tensor
-    padded_tensor = nn.functional.pad(input_tensor, total_padding, mode='reflect')
-
-    return padded_tensor
+    return total_padding
 
 
-def compute_residual_dec_input_channels(enc_out_channels: List[int], dec_out_channels: List[int]) -> List[int]:
+def compute_residual_dec_input_channels(enc_out_channels: list[int], dec_out_channels: list[int]) -> list[int]:
     enc_out_channels_rev = enc_out_channels[::-1]
     return [enc_out_channels_rev[0]] + [enc_out + dec_out for enc_out, dec_out in zip(enc_out_channels_rev[1:],
                                                                               dec_out_channels[:-1])]
 
 
-def compute_enc_input_channels(in_channels: int, enc_out_channels: List[int],
-                               depthwise: bool = False) -> List[int]:
+def compute_enc_input_channels(in_channels: int, enc_out_channels: list[int],
+                               depthwise: bool = False) -> list[int]:
     if depthwise:
         res = [in_channels]
         for i, k in zip(range(len(enc_out_channels)), enc_out_channels):
@@ -38,7 +48,7 @@ def compute_enc_input_channels(in_channels: int, enc_out_channels: List[int],
     return [in_channels] + enc_out_channels[:-1]
 
 
-def compute_depth_enc_in_out_channels(in_channels: int, enc_out_channels: List[int]) -> tuple[list[int], list[int]]:
+def compute_depth_enc_in_out_channels(in_channels: int, enc_out_channels: list[int]) -> tuple[list[int], list[int]]:
     res = [in_channels]
     for i, k in zip(range(len(enc_out_channels)), enc_out_channels):
         res.append(k * res[i])
@@ -208,7 +218,7 @@ class UpDownBlock(nn.Module):
     def __init__(self,
                  up_in_ch: int, up_out_ch: int,
                  down_out_ch: int,
-                 kernel_size: int | Tuple[int, int],
+                 kernel_size: int | tuple[int, int],
                  activation: nn.Module = None,
                  normalization: nn.Module = None,
                  pool_size: int = 0):
@@ -233,18 +243,23 @@ class UpDownBlock(nn.Module):
 class MultiScaleConv(nn.Module):
     def __init__(self,
                  out_channels: int,
-                 ks: list[int]):
+                 ks: list[int],
+                 in_channels: int = None):
         super(MultiScaleConv, self).__init__()
         self.convs = nn.ModuleList()
         self.ks = ks
-        for i in range(len(ks)):
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.pads = [same_padding(k) for k in ks]
+
+        for i, pad in enumerate(self.pads):
             self.convs.append(nn.LazyConv2d(out_channels=out_channels, kernel_size=ks[i], stride=1,
-                                            bias=True))
-        self.conv_out = nn.LazyConv2d(out_channels=out_channels, kernel_size=1, stride=1, bias=True)
+                                            padding=pad, bias=True))
+        self.pool_out = ChannelPool(top_k=out_channels, soft=True, differentiable=True, in_channels=in_channels)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = torch.cat([conv(same_padding(x, ks)) for conv, ks in zip(self.convs, self.ks)], dim=1)
-        return self.conv_out(x)
+        out = torch.cat([conv(x) for conv in self.convs], dim=1)
+        return self.pool_out(out)
     
 
 class MultiADMM(nn.Module):
@@ -263,7 +278,7 @@ class DownBlock(nn.Module):
     def __init__(self,
                  in_channels: int,
                  out_channels: int,
-                 kernel_size: int | Tuple[int, int],
+                 kernel_size: int | tuple[int, int],
                  activation: nn.Module = None,
                  normalization: nn.Module = None,
                  pool_size: int = 0):
@@ -290,7 +305,7 @@ class UpBlock(nn.Module):
     def __init__(self,
                  in_channels: int,
                  out_channels: int,
-                 kernel_size: int | Tuple[int, int],
+                 kernel_size: int | tuple[int, int],
                  activation: nn.Module = None,
                  normalization: nn.Module = None,
                  pool_size: int = 0):
@@ -313,38 +328,3 @@ class UpBlock(nn.Module):
         return x
 
 
-class DepthwiseDownBlock(nn.Module):
-    def __init__(self,
-                 in_channels: int,
-                 out_channels: int,
-                 kernel_size: int | Tuple[int, int],
-                 activation: nn.Module = None,
-                 pool_size: int = 0,
-                 use_bias: bool = True):
-        super(DepthwiseDownBlock, self).__init__()
-
-        print(out_channels, in_channels)
-
-        self.depth_conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                                    kernel_size=kernel_size, padding=max(0, pool_size-1),
-                                    padding_mode='zeros', bias=use_bias, groups=in_channels)
-        default_init_weights(self.depth_conv, {'a': 0, 'mode': 'fan_in', 'nonlinearity': 'relu'})
-
-        self.activation = activation
-        self.max_pool = nn.MaxPool2d(kernel_size=pool_size, stride=1) if pool_size != 0 else None
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.depth_conv(x)
-        x = self.activation(x) if self.activation is not None else x
-        x = self.max_pool(x) if self.max_pool is not None else x
-        return x
-
-
-@torch.no_grad()
-def default_init_weights(nn_modules: nn.Module | list[nn.Module]):
-    nn_modules = nn_modules if isinstance(nn_modules, list) else [nn_modules]
-    for nn_module in nn_modules:
-        if isinstance(nn_module, nn.Conv2d) or isinstance(nn_module, nn.ConvTranspose2d):
-            nn.init.xavier_normal_(nn_module.weight)
-            if nn_module.bias is not None:
-                nn_module.bias.data.fill_(0)

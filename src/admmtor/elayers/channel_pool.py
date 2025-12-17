@@ -26,7 +26,7 @@ class ChannelPool(nn.Module):
     def __init__(self, 
                  top_k: int, 
                  soft: bool = False, 
-                 temperature: float = 0.3, 
+                 temperature: float = 0.1, 
                  normalize_weights: bool = True, 
                  differentiable: bool = True, 
                  in_channels: int | None = None,
@@ -39,17 +39,15 @@ class ChannelPool(nn.Module):
         self.temperature = float(temperature)
         self.normalize_weights = bool(normalize_weights)
         self.differentiable = bool(differentiable)
-        self.in_channels = in_channels
+        self.in_channels = int(in_channels)
         self.const = float(const)
 
         # If differentiable mode is active we need weights for each head (K) over channels (C)
         if self.differentiable:
             if self.in_channels is None:
                 raise ValueError("in_channels must be provided when differentiable=True")
-            C = int(self.in_channels)
-            K = int(self.top_k)
             # Parameter shape (K, C) used to compute attention logits per head
-            self.weights_param = nn.Parameter(torch.empty(K, C))
+            self.weights_param = nn.Parameter(torch.zeros(self.top_k, self.in_channels))
             nn.init.xavier_uniform_(self.weights_param)
         else:
             self.register_parameter('weights_param', None)
