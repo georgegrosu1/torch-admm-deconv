@@ -14,23 +14,15 @@ from admmtor.elayers.local_attention_patch import (
 def default_init_weights(nn_modules: nn.Module | list[nn.Module]):
     nn_modules = nn_modules if isinstance(nn_modules, list) else [nn_modules]
     for nn_module in nn_modules:
-        if isinstance(nn_module, nn.Conv2d) or isinstance(nn_module, nn.ConvTranspose2d):
+        if type(nn_module) in [nn.Conv2d, 
+                               nn.LazyConv2d, 
+                               nn.ConvTranspose2d, 
+                               nn.LazyConvTranspose2d, 
+                               nn.Linear, 
+                               nn.LazyLinear]:
             nn.init.xavier_normal_(nn_module.weight)
             if nn_module.bias is not None:
                 nn_module.bias.data.fill_(0)
-
-
-def same_padding(kernel_size: int) -> tuple[int, int]:
-    if isinstance(kernel_size, int):
-        kernel_size = (kernel_size, kernel_size)
-
-    padding_h = (kernel_size[0] - 1) // 2
-    padding_w = (kernel_size[1] - 1) // 2
-
-    # Calculate total padding, assuming odd kernel sizes
-    total_padding = (padding_w, padding_h)
-
-    return total_padding
 
 
 def compute_residual_dec_input_channels(enc_out_channels: list[int], dec_out_channels: list[int]) -> list[int]:
@@ -240,25 +232,40 @@ class UpDownBlock(nn.Module):
         return res + self.chc2(x)
 
 
-class MultiScaleConv(nn.Module):
+class LazyMultiReceptiveFieldsConv(nn.Module):
     def __init__(self,
                  out_channels: int,
-                 ks: list[int],
-                 in_channels: int = None):
-        super(MultiScaleConv, self).__init__()
+                 kernel_size: int,
+                 rfs: list[int],
+        ):
+        super(LazyMultiReceptiveFieldsConv, self).__init__()
         self.convs = nn.ModuleList()
-        self.ks = ks
-        self.in_channels = in_channels
+        self.kernel_size = kernel_size
         self.out_channels = out_channels
-        self.pads = [same_padding(k) for k in ks]
+        self.rfs = rfs
+        self.pool_out = None # Initialize as None for lazy loading
 
-        for i, pad in enumerate(self.pads):
-            self.convs.append(nn.LazyConv2d(out_channels=out_channels, kernel_size=ks[i], stride=1,
-                                            padding=pad, bias=True))
-        self.pool_out = ChannelPool(top_k=out_channels, soft=True, differentiable=True, in_channels=in_channels)
+        for r in rfs:
+            self.convs.append(nn.LazyConv2d(out_channels=out_channels,
+                                            kernel_size=kernel_size,
+                                            stride=1,
+                                            dilation=r,
+                                            padding='same',
+                                            padding_mode='circular',
+                                            bias=False))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = torch.cat([conv(x) for conv in self.convs], dim=1)
+
+        if self.pool_out is None:
+            # Lazy initialization of ChannelPool
+            # The in_channels for ChannelPool will be the sum of out_channels from all convolutions
+            channel_pool_in_channels = self.out_channels * len(self.convs)
+            self.pool_out = ChannelPool(top_k=self.out_channels, soft=True,
+                                        differentiable=True, in_channels=channel_pool_in_channels).to(x.device)
+            for conv in self.convs:
+                default_init_weights(conv)
+
         return self.pool_out(out)
     
 

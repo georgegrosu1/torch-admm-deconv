@@ -47,10 +47,10 @@ class ChannelPool(nn.Module):
             if self.in_channels is None:
                 raise ValueError("in_channels must be provided when differentiable=True")
             # Parameter shape (K, C) used to compute attention logits per head
-            self.weights_param = nn.Parameter(torch.zeros(self.top_k, self.in_channels))
-            nn.init.xavier_uniform_(self.weights_param)
+            self.weights = nn.Parameter(torch.empty(self.top_k, self.in_channels))
+            nn.init.xavier_uniform_(self.weights)
         else:
-            self.register_parameter('weights_param', None)
+            self.register_parameter('weights', None)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Forward pass.
@@ -80,9 +80,9 @@ class ChannelPool(nn.Module):
             # Differentiable relaxed top-K: we compute per-head logits over channels using
             # element-wise product between per-channel scores and a learned per-head parameter
             # then softmax across channels to create continuous, differentiable weights.
-            # weights_param shape: (K, C)
+            # weights shape: (K, C)
             # scores shape: (B, C) -> expand to (B, K, C) for elementwise multiplication
-            logits = scores.unsqueeze(1) * self.weights_param.unsqueeze(0)
+            logits = scores.unsqueeze(1) * self.weights.unsqueeze(0)
             logits = logits / (self.temperature + self.const)
             weights = torch.softmax(logits, dim=-1)  # (B, K, C)
 
