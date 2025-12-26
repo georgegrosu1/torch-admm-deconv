@@ -1,3 +1,4 @@
+import re
 import torch
 import torch.nn as nn
 
@@ -11,18 +12,22 @@ from admmtor.elayers.local_attention_patch import (
 
 
 @torch.no_grad()
-def default_init_weights(nn_modules: nn.Module | list[nn.Module]):
+def default_init_weights(
+    nn_modules: nn.Module | list[nn.Module], 
+    weights_att_names: list[str],
+    init_func: callable = nn.init.kaiming_normal_,
+    bias_eps: float = 1e-12
+    ) -> None:
     nn_modules = nn_modules if isinstance(nn_modules, list) else [nn_modules]
+    
+    supported_types = re.compile(r'(?i)(?:conv|linear|norm|pool)')
     for nn_module in nn_modules:
-        if type(nn_module) in [nn.Conv2d, 
-                               nn.LazyConv2d, 
-                               nn.ConvTranspose2d, 
-                               nn.LazyConvTranspose2d, 
-                               nn.Linear, 
-                               nn.LazyLinear]:
-            nn.init.xavier_normal_(nn_module.weight)
-            if nn_module.bias is not None:
-                nn_module.bias.data.fill_(0)
+        if supported_types.search(nn_module.__class__.__name__):
+            for w_name in weights_att_names:
+                if 'bias' in w_name:
+                    getattr(nn_module, w_name).data.fill_(bias_eps)
+                else:
+                    init_func(getattr(nn_module, w_name))
 
 
 def compute_residual_dec_input_channels(enc_out_channels: list[int], dec_out_channels: list[int]) -> list[int]:
@@ -190,8 +195,8 @@ class DivergentAttention(nn.Module):
                 self.admms.append(ADMMDeconv(**admms[i]))
 
         for conv in self.convs:
-            default_init_weights(conv)
-        default_init_weights(self.convout)
+            default_init_weights(conv, ['weight', 'bias'])
+        default_init_weights(self.convout, ['weight', 'bias'])
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
         if self.admms is not None:
@@ -264,7 +269,7 @@ class LazyMultiReceptiveFieldsConv(nn.Module):
             self.pool_out = ChannelPool(top_k=self.out_channels, soft=True,
                                         differentiable=True, in_channels=channel_pool_in_channels).to(x.device)
             for conv in self.convs:
-                default_init_weights(conv)
+                default_init_weights(conv, ['weight', 'bias'])
 
         return self.pool_out(out)
     
@@ -293,7 +298,7 @@ class DownBlock(nn.Module):
         kernel_size = kernel_size if isinstance(kernel_size, tuple) else (kernel_size, kernel_size)
         self.down_conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
                                    stride=1, padding=max(0, pool_size-1), padding_mode='zeros', bias=False)
-        default_init_weights(self.down_conv)
+        default_init_weights(self.down_conv, ['weight', 'bias'])
 
         self.normalization = normalization
         self.activation = activation
@@ -320,7 +325,7 @@ class UpBlock(nn.Module):
 
         self.up_conv = nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
                                           stride=1, bias=False)
-        default_init_weights(self.up_conv)
+        default_init_weights(self.up_conv, ['weight', 'bias'])
 
         self.normalization = normalization
         self.max_pool = nn.MaxPool2d(kernel_size=pool_size, stride=1) if pool_size != 0 else None

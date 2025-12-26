@@ -5,9 +5,9 @@ from admmtor.modelbuild.blocks import (
 )
 
 
-class DenoiserV2(nn.Module):
+class ANet(nn.Module):
     def __init__(self):
-        super(DenoiserV2, self).__init__()
+        super(ANet, self).__init__()
 
         self.blocks = nn.ModuleList()
         self.activation = nn.Sigmoid()
