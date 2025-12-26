@@ -10,7 +10,13 @@ from admmtor.eprocessing.dataload import ImageDataset
 from admmtor.modelbuild.denoiser import DivergentRestorer
 from admmtor.modelbuild.nafnet import NAFNet
 
-from admmtor.eprocessing.etransforms import Scale, RandCrop, AddAWGN
+from admmtor.eprocessing.etransforms import (
+    Scale, 
+    RandCrop,
+    Flip,
+    Rotate, 
+    AddAWGN
+    )
 from admmtor.etrain.trainer import NNTrainer
 from admmtor.etrain.logger import MetricsLogger
 from admmtor.etrain.saver import NNSaver
@@ -55,7 +61,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
 
     # Prepare train & eval data loaders
     im_shape = tuple(train_cfg['im_shape'])
-    transforms = [RandCrop(im_shape), Scale()]
+    transforms = [RandCrop(im_shape), Scale(), Flip(), Rotate()]
     if max_std > 0: transforms += [AddAWGN(std_range=(min_std, max_std), both=False)]
     train_dset = ImageDataset(Path(train_cfg['train']['x_path']), Path(train_cfg['train']['y_path']), device=device,
                               transforms=transforms)
