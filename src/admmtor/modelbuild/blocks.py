@@ -24,17 +24,17 @@ def default_init_weights(
     for nn_module in nn_modules:
         if supported_types.search(nn_module.__class__.__name__):
             for w_name in weights_att_names:
-                if 'bias' in w_name:
-                    getattr(nn_module, w_name).data.fill_(bias_eps)
-                else:
-                    init_func(getattr(nn_module, w_name))
+                if getattr(nn_module, w_name) is not None:
+                    if 'bias' in w_name:
+                        getattr(nn_module, w_name).data.fill_(bias_eps)
+                    else:
+                        init_func(getattr(nn_module, w_name))
 
 
 def compute_residual_dec_input_channels(enc_out_channels: list[int], dec_out_channels: list[int]) -> list[int]:
     enc_out_channels_rev = enc_out_channels[::-1]
     return [enc_out_channels_rev[0]] + [enc_out + dec_out for enc_out, dec_out in zip(enc_out_channels_rev[1:],
                                                                               dec_out_channels[:-1])]
-
 
 def compute_enc_input_channels(in_channels: int, enc_out_channels: list[int],
                                depthwise: bool = False) -> list[int]:
@@ -338,5 +338,4 @@ class UpBlock(nn.Module):
         x = self.activation(x) if self.activation is not None else x
         x = self.max_pool(x) if self.max_pool is not None else x
         return x
-
 
