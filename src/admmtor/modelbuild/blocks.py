@@ -339,3 +339,40 @@ class UpBlock(nn.Module):
         x = self.max_pool(x) if self.max_pool is not None else x
         return x
 
+
+class BaseMRF(nn.Module):
+    def __init__(self,
+                 out_channels: int,
+                 kernel_size: int,
+                 rfs: list[int],
+                 increase_k: bool = True,
+                 increase_rfs: bool = True
+        ):
+        super(BaseMRF, self).__init__()
+        
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.rfs = rfs
+        self.increase_k = increase_k
+        self.increase_rfs = increase_rfs
+        
+        self.mrf_1 = LazyMultiReceptiveFieldsConv(
+            out_channels=out_channels, 
+            kernel_size=kernel_size, 
+            rfs=rfs
+            )
+        
+        kern = self.kernel_size + 1 if self.increase_k else max(1, self.kernel_size - 1)
+        rfs_2 = [rf + 1 for rf in self.rfs] if self.increase_rfs else [max(1, rf - 1) for rf in self.rfs]
+        self.mrf_2 = LazyMultiReceptiveFieldsConv(
+            out_channels=out_channels, 
+            kernel_size=kern, 
+            rfs=rfs_2
+            )
+        self.activ = nn.RReLU(inplace=True)
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = self.mrf_1(x)
+        out = self.activ(out)
+        out = self.mrf_2(out)
+        return out + x
