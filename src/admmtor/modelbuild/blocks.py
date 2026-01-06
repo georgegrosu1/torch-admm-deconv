@@ -356,6 +356,15 @@ class BaseMRF(nn.Module):
         self.increase_k = increase_k
         self.increase_rfs = increase_rfs
         
+        self.lap_patch_size = 64
+        self.lap_stride = 64
+        self.lap_num_processors = 16
+        self.lap = LocalAttentionPatch(
+            patch_size=self.lap_patch_size,
+            stride=self.lap_stride,
+            num_processors=self.lap_num_processors,
+            out_channels=out_channels,
+        )
         self.mrf_1 = LazyMultiReceptiveFieldsConv(
             out_channels=out_channels, 
             kernel_size=kernel_size, 
@@ -372,7 +381,67 @@ class BaseMRF(nn.Module):
         self.activ = nn.RReLU(inplace=True)
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out = self.mrf_1(x)
+        out = self.lap(x)
+        out = self.mrf_1(out)
         out = self.activ(out)
         out = self.mrf_2(out)
         return out + x
+    
+    
+class UpMRF(BaseMRF):
+    def __init__(self,
+                 out_channels: int,
+                 kernel_size: int,
+                 rfs: list[int],
+                 increase_k: bool = True,
+                 increase_rfs: bool = True
+        ):
+        super(UpMRF, self).__init__(
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            rfs=rfs,
+            increase_k=increase_k,
+            increase_rfs=increase_rfs
+        )
+        self.up = nn.ConvTranspose2d(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            dilation=5,
+            stride=1
+        )
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = super(UpMRF, self).forward(x)
+        out = self.up(out)
+        return out
+    
+    
+class DownMRF(BaseMRF):
+    def __init__(self,
+                 out_channels: int,
+                 kernel_size: int,
+                 rfs: list[int],
+                 increase_k: bool = True,
+                 increase_rfs: bool = True
+        ):
+        super(DownMRF, self).__init__(
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            rfs=rfs,
+            increase_k=increase_k,
+            increase_rfs=increase_rfs
+        )
+        self.down = nn.Conv2d(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            dilation=5,
+            stride=1,
+            bias=True
+        )
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = super(DownMRF, self).forward(x)
+        out = self.down(out)
+        return out
