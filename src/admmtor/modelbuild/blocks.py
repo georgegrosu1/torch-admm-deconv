@@ -346,7 +346,7 @@ class BaseMRF(nn.Module):
                  kernel_size: int,
                  rfs: list[int],
                  increase_k: bool = True,
-                 increase_rfs: bool = True
+                 increase_rfs: bool = True,
         ):
         super(BaseMRF, self).__init__()
         
@@ -372,11 +372,11 @@ class BaseMRF(nn.Module):
             )
         
         kern = self.kernel_size + 1 if self.increase_k else max(1, self.kernel_size - 1)
-        rfs_2 = [rf + 1 for rf in self.rfs] if self.increase_rfs else [max(1, rf - 1) for rf in self.rfs]
+        self.rfs_2 = [rf + 1 for rf in self.rfs] if self.increase_rfs else [max(1, rf - 1) for rf in self.rfs]
         self.mrf_2 = LazyMultiReceptiveFieldsConv(
             out_channels=out_channels, 
             kernel_size=kern, 
-            rfs=rfs_2
+            rfs=self.rfs_2
             )
         self.activ = nn.RReLU(inplace=True)
         

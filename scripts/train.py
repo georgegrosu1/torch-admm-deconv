@@ -14,7 +14,6 @@ from admmtor.eprocessing.etransforms import (
     Scale, 
     RandCrop,
     Flip,
-    Rotate, 
     AddAWGN
     )
 from admmtor.etrain.trainer import NNTrainer
@@ -61,7 +60,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
 
     # Prepare train & eval data loaders
     im_shape = tuple(train_cfg['im_shape'])
-    transforms = [RandCrop(im_shape), Scale(), Flip(), Rotate()]
+    transforms = [RandCrop(im_shape), Scale(), Flip()]
     if max_std > 0: transforms += [AddAWGN(std_range=(min_std, max_std), both=False)]
     train_dset = ImageDataset(Path(train_cfg['train']['x_path']), Path(train_cfg['train']['y_path']), device=device,
                               transforms=transforms)
