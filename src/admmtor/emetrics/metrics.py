@@ -259,3 +259,15 @@ class EdgeLoss(nn.Module):
     
     def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
         return self.forward(y_pred, y_true)
+    
+
+class EdgeCharb(Metric):
+    m_name = 'edge_carb_loss'
+
+    def __init__(self, device: str):
+        super().__init__(device)
+        self._func1 = EdgeLoss().to(device)
+        self._func2 = CharbonnierLoss().to(device)
+
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self._func1(y_pred, y_true) + 0.1 * self._func2(y_pred, y_true)

@@ -202,4 +202,4 @@ class DRANet(nn.Module):
         z = self.dual_tail(z1)
         Z = x - z
 
-        return Z
+        return torch.clamp(Z, 0, 1)
