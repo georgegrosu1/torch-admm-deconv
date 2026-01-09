@@ -228,16 +228,12 @@ class UpDownBlock(nn.Module):
                              padding=0, bias=False)
         self.chx = nn.Conv2d(in_channels=up_in_ch, out_channels=down_out_ch, kernel_size=1, stride=1,
                                         padding=0, bias=True)
-        self.activ = nn.PReLU(inplace=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         res = self.chx(x)
         x = self.up_block(x)
-        x = self.activ(x)
         x = self.chc(x)
-        x = self.activ(x)
         x = self.down_block(x)
-        x = self.activ(x)
         return res + self.chc2(x)
 
 
