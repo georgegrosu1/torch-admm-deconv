@@ -56,9 +56,9 @@ class NNTrainer:
         print('\n [ TRAINING ]')
         pbar = tqdm(enumerate(train_dataloader), total=len(train_dataloader))
         for batch_idx, (inputs, labels) in pbar:
-            optimizer.zero_grad()
             outputs = model(inputs)
             loss = self.loss(outputs, labels)
+            optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=1)
             optimizer.step()
