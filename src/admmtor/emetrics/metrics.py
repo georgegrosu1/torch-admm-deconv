@@ -31,7 +31,7 @@ class MSE(Metric):
         self._func = MeanSquaredError().to(device)
 
     def __call__(self, y_true: torch.Tensor, y_pred: torch.Tensor):
-        return self._func(y_true, y_pred)
+        return self._func(y_pred, y_true)
 
 
 class SSIMLoss(Metric):
