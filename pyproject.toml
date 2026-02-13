@@ -22,6 +22,8 @@ dependencies = [
     "tqdm==4.66.5",
     "bm3d==4.0.3",
     "kornia==0.8.1",
+    "einops==0.8.2",
+    "timm==1.0.24",
     "matplotlib",
     "seaborn",
     "scikit-image"
