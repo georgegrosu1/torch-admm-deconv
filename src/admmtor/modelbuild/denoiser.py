@@ -13,7 +13,7 @@ class DivergentRestorer(nn.Module):
                  gate_channels: int,
                  attention_reduction: int,
                  intermediate_activation: nn.Module = None,
-                 output_activation: nn.Module = None,
+                 output_activation: nn.Module = torch.nn.Sigmoid(),
                  admms: list[dict] = None):
         super(DivergentRestorer, self).__init__()
 
