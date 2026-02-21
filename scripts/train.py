@@ -9,6 +9,8 @@ from pathlib import Path
 from admmtor.eprocessing.dataload import ImageDataset
 from admmtor.modelbuild.denoiser import DivergentRestorer
 from admmtor.modelbuild.nafnet import NAFNet
+from admmtor.modelbuild.dranet import make_dranet
+from admmtor.modelbuild.swinir import SwinIR
 
 from admmtor.eprocessing.etransforms import (
     Scale, 
@@ -43,6 +45,13 @@ def seed_everything(seed=42):
     np.random.seed(seed)
     np.random.RandomState(seed=seed)
     torch.manual_seed(seed)
+    
+    
+loss_funcs = {
+    'charbonnier': CharbonnierLoss,
+    'ssim_color_lab_loss': SSIMLabColorLoss,
+    'mse_loss': MSE
+}
 
 
 def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, model_name: str, device: str,
@@ -69,6 +78,9 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     
     # model = NAFNet(img_channel=3, width=64, middle_blk_num=12,
     #                enc_blk_nums=[2, 2, 4, 8], dec_blk_nums=[2, 2, 2, 2])
+    
+    # model = make_dranet(train_cfg['model_params'])
+    # model = SwinIR(**train_cfg['model_params'])
 
     if train_cfg['train']['ckpt'] is not None:
         print("!!!!! LOADING CKPT !!!!!!!")
@@ -87,7 +99,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt, T_0=15000, eta_min=1e-11)
 
     eval_metrics = [PSNRMetric(device), SCCMetric(device), SSIMMetric(device), MAELoss(device), UIQMetric(device)]
-    loss_func = SSIMLabColorLoss(device)
+    loss_func = loss_funcs[train_cfg['lossf']](device)
 
     metrics_logger = MetricsLogger(loss_func, eval_metrics)
     net_trainer = NNTrainer(loss_func, eval_metrics, net_saver, metrics_logger)

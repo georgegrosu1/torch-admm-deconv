@@ -29,6 +29,7 @@
     "batch_size": 2
   },
   "im_shape": [128, 128],
+  "lossf": "color_lab_loss"
   "lr": 8.8e-5,
   "epochs": 500
 }

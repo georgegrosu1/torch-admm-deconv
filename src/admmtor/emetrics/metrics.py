@@ -37,7 +37,7 @@ class MSE(Metric):
 class SSIMLoss(Metric):
     m_name = 'ssim_loss'
 
-    def __init__(self, device: str, data_range=1.0, kern_size: int = 7):
+    def __init__(self, device: str, data_range=1.0, kern_size: int = 11):
         super().__init__(device)
         self._func = StructuralSimilarityIndexMeasure(data_range=data_range, kernel_size=kern_size).to(device)
 
@@ -218,19 +218,23 @@ class SSIMLabColorLoss(Metric):
     
 class CharbonnierLoss(nn.Module):
     """Charbonnier Loss (L1)"""
+    m_name = 'charbonnier_loss'
 
-def __init__(self, eps=1e-3):
+def __init__(self, eps=1e-9):
     super(CharbonnierLoss, self).__init__()
     self.eps = eps
 
-def forward(self, x, y):
+def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
     diff = x - y
-    # loss = torch.sum(torch.sqrt(diff * diff + self.eps))
     loss = torch.mean(torch.sqrt((diff * diff) + (self.eps*self.eps)))
     return loss
 
+def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+    return self.forward(y_pred, y_true)
+
 
 class EdgeLoss(nn.Module):
+    m_name = 'edge_loss'
 
     def __init__(self):
         super(EdgeLoss, self).__init__()

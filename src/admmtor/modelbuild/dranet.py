@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from admmtor.modelbuild.model_utils import init_weights
+
 
 class Up(nn.Module):
 
@@ -203,3 +205,9 @@ class DRANet(nn.Module):
         Z = x - z
 
         return torch.clamp(Z, 0, 1)
+    
+
+def make_dranet(model_cfg, init_type='orthogonal', init_bn_type='uniform', gain=0.2):
+    model = DRANet(**model_cfg)
+    init_weights(model, init_type=init_type, init_bn_type=init_bn_type, gain=gain)
+    return model
