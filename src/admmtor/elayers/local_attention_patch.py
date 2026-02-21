@@ -165,8 +165,8 @@ class LocalAttentionPatch(nn.Module):
         features_dim_size: int = 1,
         downscale_kernel: int | tuple[int, int] = 1,
         downscale_stride: int | tuple[int, int] = 1,
-        embedding_dim: int = 64,
-        spatial_kernel: int = 7,
+        embedding_dim: int = 32,
+        spatial_kernel: int = 5,
     ) -> None:
         super().__init__()
         if patch_size <= 0:
