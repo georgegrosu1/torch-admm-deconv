@@ -9,7 +9,32 @@ def amedian(x: torch.Tensor) -> torch.Tensor:
 
 
 def amodes(x: torch.Tensor) -> torch.Tensor:
-    return torch.mode(x.flatten().reshape(x.shape[0], x.shape[1], -1), -1).values
+    # compute the channel-wise mode across spatial dimensions.
+    # ``torch.mode`` has been observed to crash with an internal CUDA
+    # assertion on some versions of PyTorch when applied directly to
+    # large or oddly strided tensors.  To protect training from
+    # intermittent failures we:
+    #
+    # 1. early-return zeros for completely empty spatial inputs (this
+    #    mirrors the behaviour of the other statistics helpers and keeps
+    #    downstream code simple), and
+    # 2. perform the reduction on the CPU when the input lives on CUDA.
+    #
+    # The copy-to-CPU step has a tiny cost but is far cheaper than a
+    # hard crash and has never triggered the bug in our tests.
+
+    flat = x.flatten().reshape(x.shape[0], x.shape[1], -1)
+    if flat.size(-1) == 0:
+        # no spatial elements; return a zero tensor with the proper
+        # batch/channel shape and dtype/device.
+        return torch.zeros(x.shape[0], x.shape[1], device=x.device, dtype=x.dtype)
+
+    if flat.is_cuda:
+        # moving to CPU avoids the problematic CUDA kernel.
+        vals = torch.mode(flat.cpu(), -1).values
+        return vals.to(x.device)
+
+    return torch.mode(flat, -1).values
 
 
 def amean(x: torch.Tensor) -> torch.Tensor:
