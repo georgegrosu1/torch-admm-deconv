@@ -216,22 +216,22 @@ class SSIMLabColorLoss(Metric):
         return total_loss
     
     
-class CharbonnierLoss(nn.Module):
+class CharbonnierLoss(Metric):
     """Charbonnier Loss (L1)"""
     m_name = 'charbonnier_loss'
 
-def __init__(self, device: str='cuda', eps=1e-9):
-    super(CharbonnierLoss, self).__init__(device, eps)
-    self.device = device
-    self.eps = eps
+    def __init__(self, device: str='cuda', eps=1e-9):
+        super(CharbonnierLoss, self).__init__(device)
+        self.device = device
+        self.eps = eps
 
-def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    diff = x - y
-    loss = torch.mean(torch.sqrt((diff * diff) + (self.eps*self.eps)))
-    return loss
+    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        diff = x - y
+        loss = torch.mean(torch.sqrt((diff * diff) + (self.eps*self.eps)))
+        return loss
 
-def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
-    return self.forward(y_pred, y_true)
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self.forward(y_pred, y_true)
 
 
 class EdgeLoss(nn.Module):
