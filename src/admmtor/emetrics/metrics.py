@@ -220,8 +220,9 @@ class CharbonnierLoss(nn.Module):
     """Charbonnier Loss (L1)"""
     m_name = 'charbonnier_loss'
 
-def __init__(self, eps=1e-9):
-    super(CharbonnierLoss, self).__init__()
+def __init__(self, device: str='cuda', eps=1e-9):
+    super(CharbonnierLoss, self).__init__(device, eps)
+    self.device = device
     self.eps = eps
 
 def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
