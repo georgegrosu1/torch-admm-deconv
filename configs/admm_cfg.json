@@ -19,13 +19,13 @@
   },
   "train": {
     "ckpt": null,
-    "x_path": "D:\\Projects\\datasets\\rnind_bsd_div2k\\rnind_bsd\\train\\y",
-    "y_path": "D:\\Projects\\datasets\\rnind_bsd_div2k\\rnind_bsd\\train\\y",
+    "x_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\train\\y",
+    "y_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\train\\y",
     "batch_size": 2
   },
   "eval": {
-    "x_path": "D:\\Projects\\datasets\\rnind_bsd_div2k\\rnind_bsd\\test\\y",
-    "y_path": "D:\\Projects\\datasets\\rnind_bsd_div2k\\rnind_bsd\\test\\y",
+    "x_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\test\\y",
+    "y_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\test\\y",
     "batch_size": 2
   },
   "im_shape": [128, 128],
