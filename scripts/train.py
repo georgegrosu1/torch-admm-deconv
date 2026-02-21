@@ -21,13 +21,6 @@ from admmtor.etrain.logger import MetricsLogger
 from admmtor.etrain.saver import NNSaver
 from admmtor.emetrics.metrics import *
 
-DECONV1 = {'kern_size': (),
-         'max_iters': 100,
-         'iso': True}
-DECONV2 = {'kern_size': (),
-         'max_iters': 100,
-         'iso': True}
-
 
 class WeightClipper(object):
 
@@ -72,10 +65,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
     
-    model = DivergentRestorer([2, 8, 32], 3,
-                              3, 86,
-                              86, 8,
-                              output_activation=torch.nn.Sigmoid(), admms=[DECONV1, DECONV2])
+    model = DivergentRestorer(**train_cfg['model_params'])
     
     # model = NAFNet(img_channel=3, width=64, middle_blk_num=12,
     #                enc_blk_nums=[2, 2, 4, 8], dec_blk_nums=[2, 2, 2, 2])
