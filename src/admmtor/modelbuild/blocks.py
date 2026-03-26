@@ -5,6 +5,7 @@ import torch.nn as nn
 from admmtor.elayers.admmdeconv import ADMMDeconv
 from admmtor.elayers.attentions import CBAM
 from admmtor.elayers.channel_pool import ChannelPool
+from admmtor.elayers.cwa import ChannelWiseAttention
 from admmtor.elayers.local_attention_patch import (
     LocalAttentionPatch, 
     MultiLAP
@@ -345,47 +346,35 @@ class BaseMRF(nn.Module):
                  out_channels: int,
                  kernel_size: int,
                  rfs: list[int],
-                 increase_k: bool = True,
-                 increase_rfs: bool = True,
+                 lap_patch_size: int = 64,
+                 lap_num_processors: int = 16
         ):
         super(BaseMRF, self).__init__()
         
         self.out_channels = out_channels
         self.kernel_size = kernel_size
         self.rfs = rfs
-        self.increase_k = increase_k
-        self.increase_rfs = increase_rfs
         
-        self.lap_patch_size = 64
-        self.lap_stride = 64
-        self.lap_num_processors = 16
+        self.lap_patch_size = lap_patch_size
+        self.lap_stride = lap_patch_size
+        self.lap_num_processors = lap_num_processors
         self.lap = LocalAttentionPatch(
             patch_size=self.lap_patch_size,
             stride=self.lap_stride,
             num_processors=self.lap_num_processors,
-            out_channels=out_channels,
+            out_channels=self.out_channels,
         )
         self.mrf_1 = LazyMultiReceptiveFieldsConv(
-            out_channels=out_channels, 
-            kernel_size=kernel_size, 
+            out_channels=self.out_channels, 
+            kernel_size=self.kernel_size, 
             rfs=rfs
             )
-        
-        kern = self.kernel_size + 1 if self.increase_k else max(1, self.kernel_size - 1)
-        self.rfs_2 = [rf + 1 for rf in self.rfs] if self.increase_rfs else [max(1, rf - 1) for rf in self.rfs]
-        self.mrf_2 = LazyMultiReceptiveFieldsConv(
-            out_channels=out_channels, 
-            kernel_size=kern, 
-            rfs=self.rfs_2
-            )
         self.activ = nn.RReLU(inplace=True)
-        self.cbam = CBAM(gate_channels=out_channels, reduction_ratio=8, use_spatial=True)
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         out = self.lap(x)
         out = self.mrf_1(out)
         out = self.activ(out)
-        out = self.mrf_2(out)
         return out + x
     
     
@@ -395,7 +384,8 @@ class UpMRF(BaseMRF):
                  kernel_size: int,
                  rfs: list[int],
                  increase_k: bool = True,
-                 increase_rfs: bool = True
+                 increase_rfs: bool = True,
+                 up_dilation: int = 5
         ):
         super(UpMRF, self).__init__(
             out_channels=out_channels,
@@ -404,11 +394,12 @@ class UpMRF(BaseMRF):
             increase_k=increase_k,
             increase_rfs=increase_rfs
         )
+        self.up_dilation = up_dilation
         self.up = nn.ConvTranspose2d(
             in_channels=out_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
-            dilation=5,
+            dilation=up_dilation,
             stride=1
         )
         
@@ -424,7 +415,8 @@ class DownMRF(BaseMRF):
                  kernel_size: int,
                  rfs: list[int],
                  increase_k: bool = True,
-                 increase_rfs: bool = True
+                 increase_rfs: bool = True,
+                 down_dilation: int = 5
         ):
         super(DownMRF, self).__init__(
             out_channels=out_channels,
@@ -433,11 +425,12 @@ class DownMRF(BaseMRF):
             increase_k=increase_k,
             increase_rfs=increase_rfs
         )
+        self.down_dilation = down_dilation
         self.down = nn.Conv2d(
             in_channels=out_channels,
             out_channels=out_channels,
             kernel_size=kernel_size,
-            dilation=5,
+            dilation=down_dilation,
             stride=1,
             bias=True
         )
@@ -446,3 +439,35 @@ class DownMRF(BaseMRF):
         out = super(DownMRF, self).forward(x)
         out = self.down(out)
         return out
+    
+    
+class CoarseBlock(nn.Module):
+    def __init__(self,
+                 nc: int = 64
+        ):
+        super(CoarseBlock, self).__init__()
+        self.nc = nc
+        self.norm1 = LayerNorm2d(nc)
+        self.norm2 = LayerNorm2d(nc)
+        
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        pass
+    
+
+class FineBlock(nn.Module):
+    def __init__(self):
+        super(FineBlock, self).__init__()
+        
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        pass
+    
+    
+class FusionBlock(nn.Module):
+    def __init__(self):
+        super(FusionBlock, self).__init__()
+        
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        pass
