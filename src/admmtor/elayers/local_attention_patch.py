@@ -13,10 +13,11 @@ class PatchProcessor(nn.Module):
 
     def __init__(
         self,
+        in_channels: int,
         out_channels: int,
-        in_channels: int | None = None,
         embedding_dim: int = 64,
         *,
+        downscale_levels: int = 2,
         downscale_kernel: int = 2,
         downscale_stride: int = 2,
         spatial_kernel: int = 5,
@@ -32,18 +33,18 @@ class PatchProcessor(nn.Module):
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.embedding_dim = embedding_dim
+        self.downscale_levels = downscale_levels
         self.downscale_kernel = downscale_kernel
         self.downscale_stride = downscale_stride
         self.spatial_kernel = spatial_kernel
         self.spatial_dilation = spatial_dilation
         
-        # Build downscale and encoder
+        if in_channels is None:
+            self.in_channels = out_channels
         if self.in_channels != out_channels:
             self._init_channel_adapt()
         else:
             self.channel_adapt = nn.Identity()
-        if in_channels is None:
-            self.in_channels = out_channels
         self._init_downscale()
         self._init_encoder()
         self._init_spatial()
@@ -59,26 +60,20 @@ class PatchProcessor(nn.Module):
         )
         
     def _init_downscale(self) -> None:
+        downscale = nn.ModuleList()
+        for _ in range(self.downscale_levels):
+            downscale.append(
+                nn.LazyConv2d(
+                    out_channels=self.out_channels,
+                    kernel_size=1,
+                    bias=True,
+                )
+            )
+            downscale.append(
+                GeoMeanPool2d(kernel_size=self.downscale_kernel, stride=self.downscale_stride)
+            )
         self.downscale = nn.Sequential(
-            nn.LazyConv2d(
-                out_channels=self.out_channels,
-                kernel_size=1,
-                stride=1,
-                bias=False,
-            ),
-            nn.LazyConv2d(
-                out_channels=self.out_channels,
-                kernel_size=1,
-                stride=1,
-                bias=True,
-            ),
-            nn.LazyConv2d(
-                out_channels=self.out_channels,
-                kernel_size=1,
-                stride=1,
-                bias=True,
-            ),
-            GeoMeanPool2d(kernel_size=self.downscale_kernel, stride=self.downscale_stride),
+            *downscale,
         )
         
     def _init_encoder(self) -> None:
@@ -123,6 +118,7 @@ class PatchProcessor(nn.Module):
         return patch * self.activation(spatial_out)
     
     def forward(self, patch: torch.Tensor) -> torch.Tensor:
+        patch = self.channel_adapt(patch)
         glob = self.forward_global(patch) * self.alfa_w
         patch = patch + glob
         spatial = self.forward_spatial(patch) * self.beta_w
