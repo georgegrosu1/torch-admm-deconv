@@ -62,8 +62,6 @@ class GeometricGating(nn.Module):
         self.adaptgeomean = AdaptiveGeoMeanPool2d(output_size=1)
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if x.shape[1] % 2 != 0:
-            raise ValueError("Input channel dimension must be even for GeometricGating")
         x1, x2 = x.chunk(2, dim=1)
         x1_geomean = self.adaptgeomean(x1)
         x2_geomean = self.adaptgeomean(x2)
@@ -168,25 +166,27 @@ class PatchProcessor(nn.Module):
         )
         
     def _init_attention_weights(self) -> None:
-        self.alfa_w = nn.Parameter(torch.randn((1, self.out_channels, 1, 1)), requires_grad=True)
-        self.beta_w = nn.Parameter(torch.randn((1, self.out_channels, 1, 1)), requires_grad=True)
+        self.alfa_w = nn.Parameter(torch.zeros((1, self.out_channels, 1, 1)), requires_grad=True)
+        self.beta_w = nn.Parameter(torch.zeros((1, self.out_channels, 1, 1)), requires_grad=True)
+        self.gamma_w = nn.Parameter(torch.zeros((1, self.out_channels, 1, 1)), requires_grad=True)
         
     def forward_global(self, patch: torch.Tensor) -> torch.Tensor:
         batch, channels, height, width = patch.shape
         processed = self.downscale(patch)
         flat = self.encoder(processed)
         gated = flat.view(batch, channels, 1, 1)
-        return self.activation(gated.expand(-1, -1, height, width))
+        return patch * self.activation(gated.expand(-1, -1, height, width))
     
     def forward_spatial(self, patch: torch.Tensor) -> torch.Tensor:
         spatial_out = self.spatial(patch)
-        return self.activation(spatial_out)
+        return patch * self.activation(spatial_out)
     
     def forward(self, patch: torch.Tensor) -> torch.Tensor:
-        patch = self.channel_adapt(patch)
-        glob = patch * self.forward_global(patch) * self.alfa_w
-        spatial = patch * self.forward_spatial(patch) * self.beta_w
-        return self.activation(glob + spatial)
+        glob = self.forward_global(patch) * self.alfa_w
+        patch = patch + glob
+        spatial = self.forward_spatial(patch) * self.beta_w
+        patch = patch + spatial
+        return patch + self.activation(glob + spatial) * self.gamma_w
 
 
 class LocalAttentionPatch(nn.Module):
