@@ -131,54 +131,47 @@ class LocalAttentionPatch(nn.Module):
 
     def __init__(
         self,
-        patch_size: int,
-        num_processors: int,
+        in_channels: int,
         out_channels: int,
-        in_channels: int | None = None,
+        patch_size: int,
+        stride: int | None = None,
         *,
         embedding_dim: int = 1,
+        downscale_levels: int = 2,
         downscale_kernel: int | tuple[int, int] = 1,
         downscale_stride: int | tuple[int, int] = 1,
         spatial_kernel: int = 5,
-        norm_type: int = 2,
+        spatial_dilation: int = 2,
     ) -> None:
         super().__init__()
         if patch_size <= 0:
             raise ValueError("patch_size must be a positive integer")
-        if num_processors <= 0:
-            raise ValueError("num_processors must be a positive integer")
         if embedding_dim <= 0:
             raise ValueError("embedding_dim must be a positive integer")
 
         self.patch_size = patch_size
-        self.stride = patch_size
-        self.num_processors = num_processors
+        self.stride = patch_size if stride is None else stride
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.embedding_dim = embedding_dim
+        self.downscale_levels = downscale_levels
         self.downscale_kernel = downscale_kernel
         self.downscale_stride = downscale_stride
         self.spatial_kernel = spatial_kernel
-        self.norm_type = norm_type
+        self.spatial_dilation = spatial_dilation
         self.activation = nn.Sigmoid()
-        self.patch_processors = nn.ModuleList()
+        self.patch_processor = self._build_processor()
 
-        self._build_processors()
-
-    def _build_processors(self) -> None:
-        if self.patch_processors:
-            return
-        for _ in range(self.num_processors):
-            self.patch_processors.append(
-                PatchProcessor(
-                    out_channels=self.out_channels,
-                    in_channels=self.in_channels,
-                    embedding_dim=self.embedding_dim,
-                    downscale_kernel=self.downscale_kernel,
-                    downscale_stride=self.downscale_stride,
-                    spatial_kernel=self.spatial_kernel,
-                    norm_type=self.norm_type,
-                )
+    def _build_processor(self):
+        return PatchProcessor(
+                in_channels=self.in_channels,
+                out_channels=self.out_channels,
+                embedding_dim=self.embedding_dim,
+                downscale_levels=self.downscale_levels,
+                downscale_kernel=self.downscale_kernel,
+                downscale_stride=self.downscale_stride,
+                spatial_kernel=self.spatial_kernel,
+                spatial_dilation=self.spatial_dilation,
             )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
@@ -186,22 +179,17 @@ class LocalAttentionPatch(nn.Module):
             raise ValueError("LocalAttentionPatch expects input with shape (B, C, H, W)")
 
         batch, channels, height, width = x.shape
-        self._build_processors()
 
         patches = F.unfold(x, kernel_size=self.patch_size, stride=self.stride)
         num_patches = patches.shape[-1]
         if num_patches == 0:
             raise ValueError("No patches were extracted; check patch size and stride")
-        if num_patches != self.num_processors:
-            raise ValueError(
-                f"Expected num processors to be same as {num_patches} patches, but got {self.num_processors}"
-            )
 
         patches = patches.reshape(batch, channels, self.patch_size, self.patch_size, -1)
         patches = torch.unbind(patches, dim=-1)
 
         processed_patches = [
-            processor(patch) for processor, patch in zip(self.patch_processors, patches)
+            self.patch_processor(patch) for patch in patches
         ]
 
         reconstructed = F.fold(
