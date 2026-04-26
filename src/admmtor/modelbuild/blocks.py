@@ -6,30 +6,10 @@ from admmtor.elayers.admmdeconv import ADMMDeconv
 from admmtor.elayers.attentions import CBAM
 from admmtor.elayers.channel_pool import ChannelPool
 from admmtor.elayers.cwa import ChannelWiseAttention
-from admmtor.elayers.local_attention_patch import (
-    LocalAttentionPatch, 
-    MultiLAP
-)
-
-
-@torch.no_grad()
-def default_init_weights(
-    nn_modules: nn.Module | list[nn.Module], 
-    weights_att_names: list[str],
-    init_func: callable = nn.init.kaiming_normal_,
-    bias_eps: float = 1e-12
-    ) -> None:
-    nn_modules = nn_modules if isinstance(nn_modules, list) else [nn_modules]
-    
-    supported_types = re.compile(r'(?i)(?:conv|linear|norm|pool)')
-    for nn_module in nn_modules:
-        if supported_types.search(nn_module.__class__.__name__):
-            for w_name in weights_att_names:
-                if getattr(nn_module, w_name) is not None:
-                    if 'bias' in w_name:
-                        getattr(nn_module, w_name).data.fill_(bias_eps)
-                    else:
-                        init_func(getattr(nn_module, w_name))
+from admmtor.elayers.local_attention_patch import LocalAttentionPatch
+from admmtor.elayers.stats_pool import GeoMeanPool2d, AdaptiveGeoMeanPool2d
+from admmtor.elayers.gating import GeometricGating
+from admmtor.modelbuild.weights_init import default_init_weights
 
 
 def compute_residual_dec_input_channels(enc_out_channels: list[int], dec_out_channels: list[int]) -> list[int]:
@@ -443,25 +423,113 @@ class DownMRF(BaseMRF):
     
 class CoarseBlock(nn.Module):
     def __init__(self,
-                 nc: int = 64
+                 channels: int,
+                 c_mul: int = 2,
         ):
         super(CoarseBlock, self).__init__()
-        self.nc = nc
-        self.norm1 = LayerNorm2d(nc)
-        self.norm2 = LayerNorm2d(nc)
+        self.channels = channels
+        self.ch_cmul = channels * c_mul
         
+        self.norm1 = LayerNorm2d(channels)
+        self.norm2 = LayerNorm2d(channels)
+        self.conv1 = nn.Conv2d(in_channels=channels, out_channels=self.ch_cmul, 
+                               kernel_size=2, padding='same', padding_mode='circular', bias=True)
+        self.conv2 = nn.Conv2d(in_channels=self.ch_cmul, out_channels=self.ch_cmul, 
+                               kernel_size=2, padding='same', padding_mode='circular', bias=True)
+        
+        self.conv3 = nn.Conv2d(in_channels=channels, out_channels=self.ch_cmul, kernel_size=1, bias=True)
+        self.conv4 = nn.Conv2d(in_channels=self.ch_cmul, out_channels=self.ch_cmul, kernel_size=1, bias=True)
+        
+        self.ch_att = ChannelWiseAttention(in_channels=channels, probas_ch_factor=2)
+        
+        self.ch_pool1 = ChannelPool(top_k=channels, temperature=0.8, soft=True, in_channels=self.ch_cmul)
+        self.ch_pool2 = ChannelPool(top_k=channels, temperature=0.8, soft=True, in_channels=self.ch_cmul)
+        
+        self.gate = GeometricGating()
+        self.alfa = nn.Parameter(torch.zeros((1, channels, 1, 1)), requires_grad=True)
+        self.beta = nn.Parameter(torch.zeros((1, channels, 1, 1)), requires_grad=True)
+        
+        self.apply(default_init_weights)
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        pass
+        out1 = self.norm1(x)
+        out1 = self.conv1(out1)
+        out1 = self.conv2(out1)
+        out1 = self.gate(out1)
+        out1 = self.ch_pool1(out1)
+        out1 = self.ch_att(out1)
+        out1 = out1 + x * self.alfa
+        
+        out2 = self.norm2(out1)
+        out2 = self.conv3(out2)
+        out2 = self.conv4(out2)
+        out2 = self.gate(out2)
+        out2 = self.ch_pool2(out2)
+        out2 = self.ch_att(out2)
+        return out2 + x * self.beta
     
 
 class FineBlock(nn.Module):
-    def __init__(self):
+    def __init__(self,
+                 channels: int,
+                 c_mul: int = 2,
+        ):
         super(FineBlock, self).__init__()
+        self.channels = channels
+        self.ch_cmul = channels * c_mul
         
+        self.norm1 = LayerNorm2d(channels)
+        self.norm2 = LayerNorm2d(channels)
+        
+        self.conv1 = nn.Conv2d(in_channels=channels, out_channels=self.ch_cmul, 
+                               kernel_size=1, bias=True)
+        self.conv2 = nn.Conv2d(in_channels=self.ch_cmul, out_channels=self.ch_cmul, 
+                               kernel_size=2, padding='same', padding_mode='circular', bias=True)
+        self.ch_pool1 = ChannelPool(top_k=channels, temperature=0.8, soft=True, in_channels=self.ch_cmul)
+        self.conv3 = nn.Conv2d(in_channels=channels, out_channels=self.ch_cmul, kernel_size=1, bias=True)
+        self.conv4 = nn.Conv2d(in_channels=self.ch_cmul, out_channels=self.ch_cmul, 
+                               kernel_size=2, padding='same', padding_mode='circular', bias=True)
+        self.ch_pool2 = ChannelPool(top_k=channels, temperature=0.8, soft=True, in_channels=self.ch_cmul)
+        
+        self.lap1 = LocalAttentionPatch(in_channels=channels, out_channels=channels, patch_size=64,
+                                        embedding_dim=16, downscale_levels=4, downscale_kernel=2, downscale_stride=2)
+        
+        self.serial_cbam = nn.Sequential(
+            CBAM(gate_channels=channels, reduction_ratio=4, pool_types=('avg', 'max'), use_spatial=True),
+            CBAM(gate_channels=channels, reduction_ratio=4, pool_types=('lp', 'lse'), use_spatial=True)
+        )
+        self.parallel_cbam = nn.ModuleList([
+            CBAM(gate_channels=channels, reduction_ratio=8, pool_types=('avg', 'max'), use_spatial=True),
+            CBAM(gate_channels=channels, reduction_ratio=8, pool_types=('lp', 'lse'), use_spatial=True)
+        ])
+        self.ch_pool3 = ChannelPool(top_k=channels, temperature=0.8, soft=True, in_channels=3*self.channels)
+        self.gate = GeometricGating()
+        self.alfa = nn.Parameter(torch.zeros((1, channels, 1, 1)), requires_grad=True)
+        
+        
+    def _forward_parallel_cbam(self, x: torch.Tensor) -> torch.Tensor:
+        out1 = self.parallel_cbam[0](x)
+        out2 = self.parallel_cbam[1](x)
+        return torch.cat([out1, out2], dim=1)
         
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        pass
+        out1 = self.norm1(x)
+        out1 = self.conv1(out1)
+        out1 = self.conv2(out1)
+        out1 = self.gate(out1)
+        out1 = self.ch_pool1(out1)
+        out1 = self.serial_cbam(out1)
+        
+        out2 = self.norm2(x)
+        out2 = self.conv3(out2)
+        out2 = self.conv4(out2)
+        out2 = self.gate(out2)
+        out2 = self.ch_pool2(out2)
+        out2 = self._forward_parallel_cbam(out2)
+        
+        out = self.ch_pool3(torch.cat([out1, out2], dim=1))
+        out = self.lap1(out)
+        return out + x * self.alfa
     
     
 class FusionBlock(nn.Module):

@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from admmtor.elayers.channel_pool import ChannelPool
 from admmtor.modelbuild.blocks import (
+    default_init_weights,
     MultiADMM
 )
 
@@ -25,9 +26,12 @@ class ANet(nn.Module):
         self.admms_pool = ChannelPool(self.in_nc, soft=True, in_channels=head_in_nc)
         self.multiadmm = self._init_multiadmm()
         self.conv_head = self._init_conv_head()
-        self.refinement_blocks = self._init_refinement_blocks()
+        self.fine_bloks = self._init_fine_bloks()
+        self.coarse_blocks = self._init_coarse_blocks()
         
         self.fusion_blocks = self._init_fusion_blocks()
+        self.apply(default_init_weights)
+        
         
     def _init_multiadmm(self) -> nn.Module:
         return MultiADMM(
@@ -47,7 +51,10 @@ class ANet(nn.Module):
             bias=True
         )
         
-    def _init_refinement_blocks(self) -> nn.Module:
+    def _init_fine_bloks(self) -> nn.Module:
+        pass
+
+    def _init_coarse_blocks(self) -> nn.Module:
         pass
         
     def _init_fusion_blocks(self) -> nn.Module:
