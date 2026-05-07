@@ -533,9 +533,67 @@ class FineBlock(nn.Module):
     
     
 class FusionBlock(nn.Module):
-    def __init__(self):
+    def __init__(self,
+                 xin_channels: int,
+                 filters: int,
+                 out_channels: int | None = None,
+                 c_mul: int = 2
+        ):
         super(FusionBlock, self).__init__()
+        self.xin_channels = xin_channels
+        self.filters = filters
+        self.out_channels = out_channels if out_channels is not None else filters
+        self.ch_cmul = c_mul
+        self.in_wfilters = xin_channels + filters
+        self.cmul_filters = filters * c_mul
         
+        self.conv1_coarse = nn.Conv2d(in_channels=self.in_wfilters, out_channels=self.cmul_filters, kernel_size=1, bias=True)
+        self.conv2_coarse = nn.Conv2d(in_channels=self.cmul_filters, out_channels=self.cmul_filters, kernel_size=1, bias=True)
+        self.ch_pool_coarse = ChannelPool(top_k=filters, temperature=0.8, soft=True, in_channels=self.cmul_filters)
         
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        pass
+        self.conv1_fine = nn.Conv2d(in_channels=self.in_wfilters, out_channels=self.cmul_filters, kernel_size=1, bias=True)
+        self.conv2_fine = nn.Conv2d(in_channels=self.cmul_filters, out_channels=self.cmul_filters, kernel_size=1, bias=True)
+        self.ch_pool_fine = ChannelPool(top_k=filters, temperature=0.8, soft=True, in_channels=self.cmul_filters)
+        
+        self.conv1_fusion = nn.Conv2d(in_channels=2*self.filters, out_channels=self.cmul_filters, kernel_size=1, bias=True)
+        self.conv2_fusion = nn.Conv2d(in_channels=self.cmul_filters, out_channels=self.cmul_filters, kernel_size=1, bias=True)
+        self.ch_pool_fusion = ChannelPool(top_k=filters, temperature=0.8, soft=True, in_channels=self.cmul_filters)
+        
+        self.gate = GeometricGating()
+        
+        self.lap_fusion = LocalAttentionPatch(in_channels=self.filters, 
+                                              out_channels=self.filters, 
+                                              patch_size=64,
+                                              embedding_dim=16,
+                                              downscale_levels=4,
+                                              downscale_kernel=2,
+                                              downscale_stride=2)
+        self.lap_out = LocalAttentionPatch(in_channels=self.filters, 
+                                           out_channels=self.out_channels, 
+                                           patch_size=128,
+                                           embedding_dim=16,
+                                           downscale_levels=4,
+                                           downscale_kernel=2,
+                                           downscale_stride=2)
+        
+        self.activation = nn.Sigmoid()
+        
+    def forward(self, x: torch.Tensor, coarse: torch.Tensor, fine: torch.Tensor) -> torch.Tensor:
+        coarse = self.conv1_coarse(torch.cat([x, coarse], dim=1))
+        coarse = self.conv2_coarse(coarse)
+        coarse = self.gate(coarse)
+        coarse = self.ch_pool_coarse(coarse)
+        
+        fine = self.conv1_fine(torch.cat([x, fine], dim=1))
+        fine = self.conv2_fine(fine)
+        fine = self.gate(fine)
+        fine = self.ch_pool_fine(fine)
+        
+        fusion = torch.cat([coarse, fine], dim=1)
+        fusion = self.conv1_fusion(fusion)
+        fusion = self.conv2_fusion(fusion)
+        fusion = self.gate(fusion)
+        fusion = self.ch_pool_fusion(fusion)
+        fusion = self.lap_fusion(fusion)
+        fusion = self.lap_out(fusion)
+        return self.activation(fusion)

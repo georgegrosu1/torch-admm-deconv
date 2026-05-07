@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from admmtor.elayers.channel_pool import ChannelPool
 from admmtor.elayers.stats_pool import GeoMeanPool2d
 from admmtor.elayers.gating import GeometricGating
+from admmtor.modelbuild.weights_init import default_init_weights
     
 
 class PatchProcessor(nn.Module):
@@ -50,6 +51,9 @@ class PatchProcessor(nn.Module):
         self._init_spatial()
         self._init_attention_weights()
         self.activation = nn.Sigmoid()
+        
+        # Initialize weights
+        default_init_weights(self.modules())
         
     def _init_channel_adapt(self) -> None:
         self.channel_adapt =  nn.LazyConv2d(
