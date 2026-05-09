@@ -16,7 +16,7 @@ class ANetBlock(nn.Module):
                  out_nc: int = 3,
                  nc: int = 64,
                  c_mul: int = 2,
-                 activation: nn.Module = nn.Identity()):
+                 activation: nn.Module = nn.Sigmoid()):
         super(ANetBlock, self).__init__()
         
         self.in_nc = in_nc

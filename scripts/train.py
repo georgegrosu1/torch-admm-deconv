@@ -11,6 +11,7 @@ from admmtor.modelbuild.denoiser import DivergentRestorer
 from admmtor.modelbuild.nafnet import NAFNet
 from admmtor.modelbuild.dranet import make_dranet
 from admmtor.modelbuild.swinir import SwinIR
+from admmtor.modelbuild.anet import ANet
 
 from admmtor.eprocessing.etransforms import (
     Scale, 
@@ -74,7 +75,9 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
     
-    model = DivergentRestorer(**train_cfg['model_params'])
+    # model = DivergentRestorer(**train_cfg['model_params'])
+    
+    model = ANet(**train_cfg['model_params'])
     
     # model = NAFNet(img_channel=3, width=64, middle_blk_num=12,
     #                enc_blk_nums=[2, 2, 4, 8], dec_blk_nums=[2, 2, 2, 2])
