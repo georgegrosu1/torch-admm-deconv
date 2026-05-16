@@ -16,7 +16,7 @@ class ANetBlock(nn.Module):
                  out_nc: int = 3,
                  nc: int = 64,
                  c_mul: int = 2,
-                 activation: nn.Module = nn.Sigmoid()):
+                 activation: nn.Module = nn.Identity()):
         super(ANetBlock, self).__init__()
         
         self.in_nc = in_nc
@@ -70,7 +70,7 @@ class ANet(nn.Module):
         ) if self.admms_cfg is not None else nn.Identity()
         
     def _init_conv_head(self) -> nn.Module:
-        head_in_nc = self.in_nc * len(self.admms_cfg) if self.admms_cfg is not None else self.in_nc
+        head_in_nc = self.in_nc * (len(self.admms_cfg) + 1) if self.admms_cfg is not None else self.in_nc
         return nn.Conv2d(
             in_channels=head_in_nc,
             out_channels=self.nc,
@@ -96,7 +96,7 @@ class ANet(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         admms = self.multiadmm(x)
         best_admm = self.admms_pool(admms)
-        out = self.conv_head(admms)
+        out = self.conv_head(torch.cat([x, admms], dim=1))
         for block in self.anet_blocks:
-            out = block(out, best_admm)
-        return self.final_block(out, best_admm)
+            out = block(out, x)
+        return self.activation(best_admm + self.final_block(out, best_admm))
