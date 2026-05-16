@@ -56,7 +56,17 @@ class ANet(nn.Module):
         self.c_mul = c_mul
 
         head_in_nc = self.in_nc * len(self.admms_cfg) if self.admms_cfg is not None else self.in_nc
-        self.admms_pool = ChannelPool(self.in_nc, soft=True, in_channels=head_in_nc)
+        self.admms_pool = ChannelPool(top_k=self.in_nc, 
+                                      soft=True,
+                                      normalize_weights=True, 
+                                      differentiable=True, 
+                                      in_channels=head_in_nc)
+        self.intermediate_pool = ChannelPool(top_k=self.out_nc, 
+                                             temperature=0.8,
+                                             normalize_weights=True, 
+                                             differentiable=True,
+                                             soft=True, 
+                                             in_channels=self.nc)
         self.multiadmm = self._init_multiadmm()
         self.conv_head = self._init_conv_head()
         self.anet_blocks = self._init_anet_blocks()
@@ -98,5 +108,6 @@ class ANet(nn.Module):
         best_admm = self.admms_pool(admms)
         out = self.conv_head(torch.cat([x, admms], dim=1))
         for block in self.anet_blocks:
-            out = block(out, x)
+            out = block(out, best_admm)
+            best_admm += self.intermediate_pool(out)
         return self.activation(best_admm + self.final_block(out, best_admm))
