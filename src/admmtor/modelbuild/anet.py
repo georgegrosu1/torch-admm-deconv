@@ -104,10 +104,12 @@ class ANet(nn.Module):
         return blocks
             
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        admms = self.multiadmm(x)
+        imp = x
+        admms = self.multiadmm(imp)
         best_admm = self.admms_pool(admms)
-        out = self.conv_head(torch.cat([x, admms], dim=1))
+        out = self.conv_head(torch.cat([imp, admms], dim=1))
         for block in self.anet_blocks:
-            out = block(out, best_admm)
+            out = block(out, imp)
             best_admm += self.intermediate_pool(out)
-        return self.activation(best_admm + self.final_block(out, best_admm))
+            imp += self.activation(best_admm)
+        return self.activation(imp + self.final_block(out, best_admm))
