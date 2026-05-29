@@ -51,6 +51,7 @@ def seed_everything(seed=42):
 loss_funcs = {
     'charbonnier': CharbonnierLoss,
     'ssim_color_lab_loss': SSIMLabColorLoss,
+    'alt_color_lab_loss': AlternativeSSIMLabColorLoss,
     'mse_loss': MSE
 }
 
