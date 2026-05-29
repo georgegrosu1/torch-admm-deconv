@@ -148,6 +148,91 @@ class PSNRLoss(Metric):
         assert len(pred.size()) == 4
 
         return self.loss_weight * self.scale * torch.log(((pred - target) ** 2).mean(dim=(1, 2, 3)) + 1e-8).mean()
+    
+    
+class CharbonnierLoss(Metric):
+    """Charbonnier Loss (L1)"""
+    m_name = 'charbonnier_loss'
+
+    def __init__(self, device: str='cuda', eps=1e-3):
+        super(CharbonnierLoss, self).__init__(device)
+        self.device = device
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        diff = x - y
+        loss = torch.mean(torch.sqrt((diff * diff) + (self.eps*self.eps)))
+        return loss
+
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self.forward(y_pred, y_true)
+
+
+class EdgeLoss(nn.Module):
+    m_name = 'edge_loss'
+
+    def __init__(self):
+        super(EdgeLoss, self).__init__()
+        k = torch.Tensor([[.05, .25, .4, .25, .05]])
+        self.kernel = torch.matmul(k.t(), k).unsqueeze(0).repeat(1, 1, 1, 1)
+        if torch.cuda.is_available():
+            self.kernel = self.kernel.cuda()
+        self.loss = CharbonnierLoss()
+
+    def conv_gauss(self, img):
+        n_channels, _, kw, kh = self.kernel.shape
+        img = F.pad(img, (kw//2, kh//2, kw//2, kh//2), mode='replicate')
+        return F.conv2d(img, self.kernel, groups=n_channels)
+
+    def laplacian_kernel(self, current):
+        filtered = self.conv_gauss(current)    # filter
+        down = filtered[:, :, ::2, ::2]               # downsample
+        new_filter = torch.zeros_like(filtered)
+        new_filter[:, :, ::2, ::2] = down * 4                  # upsample
+        filtered = self.conv_gauss(new_filter)  # filter
+        diff = current - filtered
+        return diff
+
+    def forward(self, x, y):
+        loss = self.loss(self.laplacian_kernel(x), self.laplacian_kernel(y))
+        return loss
+
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self.forward(y_pred, y_true)
+
+
+class EdgeCharb(Metric):
+    m_name = 'edge_carb_loss'
+
+    def __init__(self, device: str):
+        super().__init__(device)
+        self._func1 = EdgeLoss().to(device)
+        self._func2 = CharbonnierLoss().to(device)
+
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self._func1(y_pred, y_true) + 0.1 * self._func2(y_pred, y_true)
+    
+    
+class FrequencyLoss(Metric):
+    m_name = 'fft_loss'
+    
+    def __init__(self, device: str='cuda'):
+        super(FrequencyLoss, self).__init__(device)
+        self.loss_fn = nn.L1Loss()
+
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        # Compute 2D Real FFT
+        fft_x = torch.fft.rfft2(y_pred, norm='ortho')
+        fft_y = torch.fft.rfft2(y_true, norm='ortho')
+        
+        # Penalize differences in amplitude (magnitude)
+        mag_x = torch.abs(fft_x)
+        mag_y = torch.abs(fft_y)
+        
+        return self.loss_fn(mag_x, mag_y)
+    
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self.forward(y_pred, y_true)
 
 
 class SSIMLabColorLoss(Metric):
@@ -216,64 +301,46 @@ class SSIMLabColorLoss(Metric):
         return total_loss
     
     
-class CharbonnierLoss(Metric):
-    """Charbonnier Loss (L1)"""
-    m_name = 'charbonnier_loss'
+class AlternativeSSIMLabColorLoss(Metric):
+    m_name = 'alt_color_lab_loss'
 
-    def __init__(self, device: str='cuda', eps=1e-9):
-        super(CharbonnierLoss, self).__init__(device)
-        self.device = device
-        self.eps = eps
+    def __init__(self, device: str='cuda', ssim_weight=1.0, edge_weight=0.1, color_weight=1.0):
+        super(AlternativeSSIMLabColorLoss, self).__init__(device)
+        self.ssim_weight = ssim_weight
+        self.edge_weight = edge_weight
+        self.color_weight = color_weight
 
-    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        diff = x - y
-        loss = torch.mean(torch.sqrt((diff * diff) + (self.eps*self.eps)))
-        return loss
-
-    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
-        return self.forward(y_pred, y_true)
-
-
-class EdgeLoss(nn.Module):
-    m_name = 'edge_loss'
-
-    def __init__(self):
-        super(EdgeLoss, self).__init__()
-        k = torch.Tensor([[.05, .25, .4, .25, .05]])
-        self.kernel = torch.matmul(k.t(), k).unsqueeze(0).repeat(3, 1, 1, 1)
-        if torch.cuda.is_available():
-            self.kernel = self.kernel.cuda()
-        self.loss = CharbonnierLoss()
-
-    def conv_gauss(self, img):
-        n_channels, _, kw, kh = self.kernel.shape
-        img = F.pad(img, (kw//2, kh//2, kw//2, kh//2), mode='replicate')
-        return F.conv2d(img, self.kernel, groups=n_channels)
-
-    def laplacian_kernel(self, current):
-        filtered = self.conv_gauss(current)    # filter
-        down = filtered[:, :, ::2, ::2]               # downsample
-        new_filter = torch.zeros_like(filtered)
-        new_filter[:, :, ::2, ::2] = down*4                  # upsample
-        filtered = self.conv_gauss(new_filter)  # filter
-        diff = current - filtered
-        return diff
-
-    def forward(self, x, y):
-        loss = self.loss(self.laplacian_kernel(x), self.laplacian_kernel(y))
-        return loss
+        # Base structural losses
+        self.ssim_loss = SSIMLoss(device=device) 
+        self.edge_loss = EdgeLoss(device=device)
+        
+        # Color loss
+        self.charbonnier_loss = CharbonnierLoss()
 
     def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
-        return self.forward(y_pred, y_true)
+        # 1. Convert to L*a*b* (assuming function handles standard RGB [0,1] input)
+        denoised_lab = kornia_rgb_to_lab(y_pred)
+        reference_lab = kornia_rgb_to_lab(y_true)
 
+        # 2. Separate Channels
+        pred_L = denoised_lab[:, 0:1, :, :]
+        true_L = reference_lab[:, 0:1, :, :]
 
-class EdgeCharb(Metric):
-    m_name = 'edge_carb_loss'
+        pred_ab = denoised_lab[:, 1:3, :, :]
+        true_ab = reference_lab[:, 1:3, :, :]
 
-    def __init__(self, device: str):
-        super().__init__(device)
-        self._func1 = EdgeLoss().to(device)
-        self._func2 = CharbonnierLoss().to(device)
+        # 3. LUMINANCE (Structure + Edges)
+        # Apply both SSIM and Edge Laplacian ONLY to the L* channel
+        ssim_loss_val = self.ssim_loss(pred_L, true_L)
+        edge_loss_val = self.edge_loss(pred_L, true_L)
 
-    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
-        return self._func1(y_pred, y_true) + 0.1 * self._func2(y_pred, y_true)
+        # 4. CHROMINANCE (Color mapping)
+        # Apply standard Charbonnier to a*b* for smooth, accurate color tracking
+        color_loss_val = self.charbonnier_loss(pred_ab, true_ab)
+
+        # 5. Composite Total
+        total_loss = (self.ssim_weight * ssim_loss_val) + \
+                     (self.edge_weight * edge_loss_val) + \
+                     (self.color_weight * color_loss_val)
+                     
+        return total_loss
