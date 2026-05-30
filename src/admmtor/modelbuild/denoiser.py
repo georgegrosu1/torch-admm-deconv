@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
 from admmtor.modelbuild.blocks import DivergentAttention
-from admmtor.elayers.cwa import ChannelWiseAttention
-from admmtor.elayers.local_attention_patch import LocalAttentionPatch
+from admmtor.elayers.cwa import ChannelWiseAttention, ChannelCompression
 
 
 class DivergentRestorer(nn.Module):
@@ -85,10 +84,10 @@ class DivergentRestorerResid(nn.Module):
         self.blocks = nn.ModuleList()
         self.scas = nn.ModuleList()
         for i in range(num_levels):
-            self.scas.append(ChannelWiseAttention(channel_compress_methods=[ChannelWiseAttention.STD,
-                                                                            ChannelWiseAttention.MAX, 
-                                                                            ChannelWiseAttention.MEAN],
-                in_channels=in_channels, probas_ch_factor=8
+            self.scas.append(ChannelWiseAttention(channel_compress_methods=[ChannelCompression.STD,
+                                                                            ChannelCompression.MAX,
+                                                                            ChannelCompression.MEAN],
+                in_channels=filters, probas_ch_factor=8
                 ))
             if i == 0:
                 self.blocks.append(DivergentAttention(branches=self._level_branches[i],

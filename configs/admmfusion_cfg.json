@@ -18,7 +18,7 @@
     "attention_reduction": 8
   },
   "train": {
-    "ckpt": null,
+    "ckpt": "C:\\Users\\40774\\Dev\\torch-admm-deconv\\trained_models\\admm-bsd-div2k-15and35std-feb-128\\Sun-Feb--1-14_15_07-2026\\admm-bsd-div2k-15and35std-feb-128_epoch376_vloss0.1274.tar",
     "x_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\train\\y",
     "y_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\train\\y",
     "batch_size": 2

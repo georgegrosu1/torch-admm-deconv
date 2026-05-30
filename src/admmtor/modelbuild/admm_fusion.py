@@ -23,7 +23,7 @@ class ADMMFusion(nn.Module):
         for param in nn_module.parameters():
             param.requires_grad = False
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         out_denoised = self.denoiser(x)
         out_resid = self.denoiser_resid(x)
-        return out_denoised, out_resid
+        return (out_denoised, out_resid)
