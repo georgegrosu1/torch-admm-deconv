@@ -20,8 +20,6 @@ class DivergentRestorer(nn.Module):
 
         num_levels = len(level_branches)
         self._level_branches = level_branches
-        
-        self.lap = LocalAttentionPatch(final_channels, final_channels, 32, embedding_dim=64, downscale_levels=2, downscale_kernel=2)
         self.out_activation = output_activation
 
         self.blocks = nn.ModuleList()
@@ -64,4 +62,4 @@ class DivergentRestorer(nn.Module):
             else:
                 out = self.scas[i](out)
                 out = self.blocks[i](torch.cat(tensors=[out, x], dim=1))
-        return self.out_activation(self.lap(out))
+        return out
