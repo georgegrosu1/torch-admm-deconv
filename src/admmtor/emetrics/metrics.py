@@ -328,3 +328,44 @@ class AlternativeSSIMLabColorLoss(Metric):
                      (self.color_weight * color_loss_val)
                      
         return total_loss
+    
+    
+class CascadeResidLoss(Metric):
+    m_name = 'cascade_resid_loss'
+    
+    def __init__(self, device: str='cuda'):
+        super(CascadeResidLoss, self).__init__(device)
+        self.loss = SSIMLabColorLoss(device=device)
+        
+    def __call__(self, out_denoised: torch.Tensor, out_resid: torch.Tensor, y_true: torch.Tensor):
+        resid_true = y_true - out_denoised
+        loss_resid = self.loss(out_resid, resid_true)
+        
+        return loss_resid
+    
+    
+class ADMMFusionSSIM(Metric):
+    m_name = 'admm_fusion_ssim'
+    
+    def __init__(self, device: str='cuda'):
+        super(ADMMFusionSSIM, self).__init__(device)
+        self.ssim_metric = SSIMMetric(device=device)
+        
+    def __call__(self, out_denoised: torch.Tensor, out_resid: torch.Tensor, y_true: torch.Tensor):
+        fusion = out_denoised + out_resid
+        ssim_val = self.ssim_metric(fusion, y_true)
+        return ssim_val
+    
+    
+class ADMMFusionPSNR(Metric):
+    m_name = 'admm_fusion_psnr'
+    
+    def __init__(self, device: str='cuda'):
+        super(ADMMFusionPSNR, self).__init__(device)
+        self.psnr_metric = PSNRMetric(device=device)
+        
+    def __call__(self, out_denoised: torch.Tensor, out_resid: torch.Tensor, y_true: torch.Tensor):
+        fusion = out_denoised + out_resid
+        psnr_val = self.psnr_metric(fusion, y_true)
+        return psnr_val
+        

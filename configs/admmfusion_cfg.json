@@ -1,0 +1,35 @@
+{
+  "model_params":{
+    "admms": [{
+      "kern_size": null,
+      "max_iters": 100,
+      "iso": true
+    },
+    {
+      "kern_size": null,
+      "max_iters": 100,
+      "iso": true
+    }],
+    "level_branches": [2, 8, 32],
+    "in_channels": 3,
+    "final_channels": 3,
+    "filters": 86,
+    "gate_channels": 86,
+    "attention_reduction": 8
+  },
+  "train": {
+    "ckpt": null,
+    "x_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\train\\y",
+    "y_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\train\\y",
+    "batch_size": 2
+  },
+  "eval": {
+    "x_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\test\\y",
+    "y_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\test\\y",
+    "batch_size": 2
+  },
+  "im_shape": [128, 128],
+  "lossf": "cascade_resid_loss",
+  "lr": 8.8e-5,
+  "epochs": 500
+}
