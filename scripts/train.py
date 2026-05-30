@@ -76,9 +76,9 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
     
-    # model = DivergentRestorer(**train_cfg['model_params'])
+    model = DivergentRestorer(**train_cfg['model_params'])
     
-    model = ANet(**train_cfg['model_params'])
+    # model = ANet(**train_cfg['model_params'])
     
     # model = NAFNet(img_channel=3, width=64, middle_blk_num=12,
     #                enc_blk_nums=[2, 2, 4, 8], dec_blk_nums=[2, 2, 2, 2])
@@ -116,7 +116,7 @@ def main():
 
     args_parser = argparse.ArgumentParser(description='Training script for image restoration')
     args_parser.add_argument('--config_file', '-c', type=str, help='Path to train config file',
-                             default=r'configs/anet_cfg.json')
+                             default=r'configs/admm_cfg.json')
     args_parser.add_argument('--min_awgn', '-m', type=int, help='Min std for AWGN',
                              default=0)
     args_parser.add_argument('--max_awgn', '-M', type=int, help='Max std for AWGN',

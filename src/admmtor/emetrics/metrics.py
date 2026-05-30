@@ -174,7 +174,7 @@ class EdgeLoss(nn.Module):
     def __init__(self):
         super(EdgeLoss, self).__init__()
         k = torch.Tensor([[.05, .25, .4, .25, .05]])
-        self.kernel = torch.matmul(k.t(), k).unsqueeze(0).repeat(1, 1, 1, 1)
+        self.kernel = torch.matmul(k.t(), k).unsqueeze(0).repeat(3, 1, 1, 1)
         if torch.cuda.is_available():
             self.kernel = self.kernel.cuda()
         self.loss = CharbonnierLoss()
@@ -318,25 +318,9 @@ class AlternativeSSIMLabColorLoss(Metric):
         self.charbonnier_loss = CharbonnierLoss()
 
     def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
-        # 1. Convert to L*a*b* (assuming function handles standard RGB [0,1] input)
-        denoised_lab = kornia_rgb_to_lab(y_pred)
-        reference_lab = kornia_rgb_to_lab(y_true)
-
-        # 2. Separate Channels
-        pred_L = denoised_lab[:, 0:1, :, :]
-        true_L = reference_lab[:, 0:1, :, :]
-
-        pred_ab = denoised_lab[:, 1:3, :, :]
-        true_ab = reference_lab[:, 1:3, :, :]
-
-        # 3. LUMINANCE (Structure + Edges)
-        # Apply both SSIM and Edge Laplacian ONLY to the L* channel
-        ssim_loss_val = self.ssim_loss(pred_L, true_L)
-        edge_loss_val = self.edge_loss(pred_L, true_L)
-
-        # 4. CHROMINANCE (Color mapping)
-        # Apply standard Charbonnier to a*b* for smooth, accurate color tracking
-        color_loss_val = self.charbonnier_loss(pred_ab, true_ab)
+        ssim_loss_val = self.ssim_loss(y_pred, y_true)
+        edge_loss_val = self.edge_loss(y_pred, y_true)
+        color_loss_val = self.charbonnier_loss(y_pred, y_true)
 
         # 5. Composite Total
         total_loss = (self.ssim_weight * ssim_loss_val) + \
