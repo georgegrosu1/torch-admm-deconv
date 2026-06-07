@@ -78,7 +78,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
     
-    modelresid = DivergentRestorerResid(**train_cfg['model_params'])
+    model = DivergentRestorer(**train_cfg['model_params'])
     
     # model = ANet(**train_cfg['model_params'])
     
@@ -100,13 +100,13 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
 
     # clipper = WeightClipper()
     # model.apply(clipper)
-    model = ADMMFusion(modeldenoiser, modelresid, freeze_denoiser=True, freeze_denoiser_resid=False)
+    # model = ADMMFusion(modeldenoiser, modelresid, freeze_denoiser=True, freeze_denoiser_resid=False)
     model = model.to(device)
     opt = torch.optim.AdamW(model.parameters(), train_cfg['lr'], betas=(0.9, 0.9))
 
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt, T_0=15000, eta_min=1e-11)
 
-    eval_metrics = [ADMMFusionPSNR(device), ADMMFusionSSIM(device)]
+    eval_metrics = [PSNRMetric(device), SSIMMetric(device), SCCMetric(device), UIQMetric(device)]
     loss_func = loss_funcs[train_cfg['lossf']](device)
 
     metrics_logger = MetricsLogger(loss_func, eval_metrics)
@@ -120,7 +120,7 @@ def main():
 
     args_parser = argparse.ArgumentParser(description='Training script for image restoration')
     args_parser.add_argument('--config_file', '-c', type=str, help='Path to train config file',
-                             default=r'configs/admmfusion_cfg.json')
+                             default=r'configs/admm_cfg.json')
     args_parser.add_argument('--min_awgn', '-m', type=int, help='Min std for AWGN',
                              default=0)
     args_parser.add_argument('--max_awgn', '-M', type=int, help='Max std for AWGN',

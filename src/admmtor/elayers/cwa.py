@@ -31,16 +31,18 @@ def amad(x: torch.Tensor) -> torch.Tensor:
     return torch.mean(torch.abs(x - mean), dim=(2, 3), keepdim=True)
 
 def askewness(x: torch.Tensor) -> torch.Tensor:
-    """3rd Moment (Skewness): Captures structural asymmetry. Gaussian noise is symmetric (~0)."""
     mean = amean(x)
     std = astd(x)
-    return torch.mean(((x - mean) / std) ** 3, dim=(2, 3), keepdim=True)
+    # Clamp to prevent gradient explosion on outlier pixels
+    norm_x = torch.clamp((x - mean) / std, min=-3.0, max=3.0)
+    return torch.mean(norm_x ** 3, dim=(2, 3), keepdim=True)
 
 def akurtosis(x: torch.Tensor) -> torch.Tensor:
-    """4th Moment (Kurtosis): Captures heavy tails. Gaussian noise has a strict kurtosis of 3."""
     mean = amean(x)
     std = astd(x)
-    return torch.mean(((x - mean) / std) ** 4, dim=(2, 3), keepdim=True)
+    # Clamp to prevent 4th-power gradient explosion
+    norm_x = torch.clamp((x - mean) / std, min=-3.0, max=3.0)
+    return torch.mean(norm_x ** 4, dim=(2, 3), keepdim=True)
 
 def atotal_variation(x: torch.Tensor) -> torch.Tensor:
     """Spatial Total Variation (TV): Directly measures high-frequency energy / spatial roughness."""
@@ -94,7 +96,13 @@ class ChannelWiseAttention(nn.Module):
         # from mathematically collapsing into a single linear transformation.
         self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=self.probas_space_size, kernel_size=1,
                                stride=1, padding=0, bias=True)
-        self.act = nn.GELU()
+        self.dwconv1 = nn.Conv2d(self.probas_space_size, self.probas_space_size, kernel_size=3, padding=1,
+                                groups=self.probas_space_size)
+        self.dwconv2 = nn.Conv2d(self.probas_space_size, self.probas_space_size, kernel_size=1, padding=0,
+                                groups=self.probas_space_size)
+        self.dwconv3 = nn.Conv2d(self.probas_space_size, self.probas_space_size, kernel_size=5, padding=2,
+                                groups=self.probas_space_size)
+        self.act = nn.SELU()
         self.conv2 = nn.Conv2d(in_channels=self.probas_space_size, out_channels=in_channels, kernel_size=1,
                                stride=1, padding=0, bias=True)
         
@@ -103,9 +111,15 @@ class ChannelWiseAttention(nn.Module):
         # [LOGICAL FIX 2]: Channel-specific statistical weights.
         # Shape (1, in_channels, 1, 1) allows the network to learn a unique optimal blend 
         # of statistics independently for every single feature map.
+        # [CRITICAL FIX]: Initialize statistical weights to ZERO.
+        # This prevents Sigmoid saturation at Step 0. The network will start by acting
+        # purely on spatial features, and gracefully learn to scale up the statistical
+        # attention weights where needed without exploding the gradients.
         self.compress_weight = nn.ParameterList()
         for _ in range(len(channel_compress_methods)):
-            self.compress_weight.append(nn.Parameter(torch.ones((1, in_channels, 1, 1)) / len(channel_compress_methods), requires_grad=True))
+            self.compress_weight.append(
+                nn.Parameter(torch.zeros((1, in_channels, 1, 1)), requires_grad=True)
+            )
             
         self.prob_func = nn.Sigmoid()
 
@@ -125,7 +139,8 @@ class ChannelWiseAttention(nn.Module):
         weighted_compress = self._get_compressed_vals(x)
         
         # 2. Local context: Compute spatial feature maps (Now correctly non-linear!)
-        spatial_features = self.conv2(self.act(self.conv1(x)))
+        # Spatial features now have neighborhood context
+        spatial_features = self.conv2(self.act(self.dwconv3(self.dwconv2(self.dwconv1(self.conv1(x))))))
         
         # 3. Additive Fusion [LOGICAL FIX 3]
         # Adding acts as a dynamic, context-aware bias. It's significantly more stable 

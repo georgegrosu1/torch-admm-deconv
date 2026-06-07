@@ -312,7 +312,7 @@ class AlternativeSSIMLabColorLoss(Metric):
 
         # Base structural losses
         self.ssim_loss = SSIMLoss(device=device) 
-        self.edge_loss = EdgeLoss(device=device)
+        self.edge_loss = EdgeLoss()
         
         # Color loss
         self.charbonnier_loss = CharbonnierLoss()
