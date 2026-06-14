@@ -159,12 +159,14 @@ class DivergentAttention(nn.Module):
             assert len(admms) == branches
 
         self._pool_types = [('avg', 'max'), ('lp', 'lse')]
+        self.branches = branches
         self.admms = nn.ModuleList() if admms is not None else None
         self.out_activation = out_activation if out_activation is not None else nn.Identity()
         self.convs = nn.ModuleList()
         self.attentions = nn.ModuleList()
         self.convout = nn.Conv2d(in_channels=conv_filters*branches, out_channels=out_channels,
                                  kernel_size=1, stride=1, padding=0, bias=True)
+        self.cwa = ChannelWiseAttention(conv_filters * branches//2)
         for i in range(branches):
             self.convs.append(nn.Conv2d(in_channels=in_channels, out_channels=conv_filters, kernel_size=1, stride=1,
                                         padding=0, bias=True))
@@ -188,7 +190,12 @@ class DivergentAttention(nn.Module):
                                     zip(self.attentions[:len(self.attentions) // 2], outs[:len(outs) // 2])], dim=1)
         outs_b = torch.cat(tensors=[attention(feat) + feat for attention, feat in
                                     zip(self.attentions[len(self.attentions) // 2:], outs[len(outs) // 2:])], dim=1)
-        outs = torch.cat([outs_a * outs_b, outs_a + outs_b], dim=1)
+        if self.branches == 2:
+            outs = torch.cat([outs_a * outs_b, self.cwa(outs_a + outs_b)], dim=1)
+        elif self.branches == 8:
+            outs = torch.cat([outs_a * self.cwa(outs_b), outs_a + outs_b], dim=1)
+        else:
+            outs = torch.cat([outs_a * outs_b, self.cwa(outs_a) + outs_b], dim=1)
         return self.out_activation(self.convout(outs))
 
 
@@ -205,6 +212,7 @@ class UpDownBlock(nn.Module):
         self.down_block = DownBlock(up_out_ch, down_out_ch, kernel_size, normalization, activation, pool_size)
         self.chc = nn.Conv2d(in_channels=up_out_ch, out_channels=up_out_ch, kernel_size=1, stride=1,
                                         padding=0, bias=False)
+        self.sil = nn.SiLU(inplace=True)
         self.chc2 = nn.Conv2d(in_channels=down_out_ch, out_channels=down_out_ch, kernel_size=1, stride=1,
                              padding=0, bias=False)
         self.chx = nn.Conv2d(in_channels=up_in_ch, out_channels=down_out_ch, kernel_size=1, stride=1,
@@ -213,7 +221,7 @@ class UpDownBlock(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         res = self.chx(x)
         x = self.up_block(x)
-        x = self.chc(x)
+        x = self.sil(self.chc(x))
         x = self.down_block(x)
         return res + self.chc2(x)
 

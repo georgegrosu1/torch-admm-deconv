@@ -104,7 +104,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     model = model.to(device)
     opt = torch.optim.AdamW(model.parameters(), train_cfg['lr'], betas=(0.9, 0.9))
 
-    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt, T_0=15000, eta_min=1e-11)
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt, T_0=150000, eta_min=1e-11)
 
     eval_metrics = [PSNRMetric(device), SSIMMetric(device), SCCMetric(device), UIQMetric(device)]
     loss_func = loss_funcs[train_cfg['lossf']](device)

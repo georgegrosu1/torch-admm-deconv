@@ -94,15 +94,33 @@ class ChannelWiseAttention(nn.Module):
 
         # [LOGICAL FIX 1]: Added non-linear activation (GELU) to prevent the two 1x1 convolutions 
         # from mathematically collapsing into a single linear transformation.
-        self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=self.probas_space_size, kernel_size=1,
-                               stride=1, padding=0, bias=True)
-        self.dwconv1 = nn.Conv2d(self.probas_space_size, self.probas_space_size, kernel_size=3, padding=1,
-                                groups=self.probas_space_size)
-        self.dwconv2 = nn.Conv2d(self.probas_space_size, self.probas_space_size, kernel_size=1, padding=0,
-                                groups=self.probas_space_size)
-        self.dwconv3 = nn.Conv2d(self.probas_space_size, self.probas_space_size, kernel_size=5, padding=2,
-                                groups=self.probas_space_size)
-        self.act = nn.SELU()
+        self.depths = nn.Sequential(
+            nn.Conv2d(in_channels=in_channels, out_channels=self.probas_space_size, kernel_size=1,
+                      stride=1, padding=0, bias=True),
+            nn.Conv2d(self.probas_space_size, self.probas_space_size, kernel_size=3,
+                      groups=self.probas_space_size, padding=1, bias=True),
+            nn.Conv2d(self.probas_space_size, self.probas_space_size, kernel_size=1, bias=True),
+            nn.Conv2d(self.probas_space_size, self.probas_space_size, kernel_size=5, padding=2,
+                      groups=self.probas_space_size, bias=True),
+            nn.SiLU(inplace=True),
+            nn.InstanceNorm2d(self.probas_space_size),
+            nn.Conv2d(self.probas_space_size, self.probas_space_size, kernel_size=1, bias=True),
+            nn.Conv2d(self.probas_space_size, self.probas_space_size, kernel_size=1, bias=True),
+            nn.Conv2d(self.probas_space_size, self.probas_space_size, kernel_size=7, padding=3,
+                      groups=self.probas_space_size, bias=True),
+            nn.Conv2d(self.probas_space_size, self.probas_space_size, kernel_size=1, bias=True),
+            nn.Conv2d(in_channels=self.probas_space_size, out_channels=in_channels, kernel_size=1,
+                      stride=1, padding=0, bias=True)
+        )
+        # self.conv1 = nn.Conv2d(in_channels=in_channels, out_channels=self.probas_space_size, kernel_size=1,
+        #                        stride=1, padding=0, bias=True)
+        # self.dwconv1 = nn.Conv2d(self.probas_space_size, self.probas_space_size, kernel_size=5, padding=2,
+        #                         groups=self.probas_space_size)
+        # self.dwconv2 = nn.Conv2d(self.probas_space_size, self.probas_space_size, kernel_size=1, padding=0,
+        #                         groups=self.probas_space_size)
+        # self.dwconv3 = nn.Conv2d(self.probas_space_size, self.probas_space_size, kernel_size=7, padding=3,
+        #                         groups=self.probas_space_size)
+        # self.act = nn.SELU()
         self.conv2 = nn.Conv2d(in_channels=self.probas_space_size, out_channels=in_channels, kernel_size=1,
                                stride=1, padding=0, bias=True)
         
@@ -140,8 +158,8 @@ class ChannelWiseAttention(nn.Module):
         
         # 2. Local context: Compute spatial feature maps (Now correctly non-linear!)
         # Spatial features now have neighborhood context
-        spatial_features = self.conv2(self.act(self.dwconv3(self.dwconv2(self.dwconv1(self.conv1(x))))))
-        
+        # spatial_features = self.conv2(self.dwconv3(self.dwconv2(self.dwconv1(self.conv1(x)))))
+        spatial_features = self.depths(x)
         # 3. Additive Fusion [LOGICAL FIX 3]
         # Adding acts as a dynamic, context-aware bias. It's significantly more stable 
         # than multiplication, which can severely saturate the Sigmoid and kill gradients.

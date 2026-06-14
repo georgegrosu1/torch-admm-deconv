@@ -39,7 +39,7 @@ class SSIMLoss(Metric):
 
     def __init__(self, device: str, data_range=1.0, kern_size: int = 11):
         super().__init__(device)
-        self._func = StructuralSimilarityIndexMeasure(data_range=data_range, kernel_size=kern_size).to(device)
+        self._func = StructuralSimilarityIndexMeasure(data_range=data_range, kernel_size=kern_size, k1=0.005, k2=0.025).to(device)
 
     def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
         return 1.0 - self._func(y_pred, y_true)
