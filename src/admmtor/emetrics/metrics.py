@@ -58,9 +58,11 @@ class MAELoss(Metric):
 class MSSSIMLoss(Metric):
     m_name = 'mssssim_loss'
 
-    def __init__(self, device: str, data_range=1.0):
+    def __init__(self, device: str, data_range=1.0, kernel_size: int | list[int] = 11):
         super().__init__(device)
-        self._func = MultiScaleStructuralSimilarityIndexMeasure(data_range=data_range).to(device)
+        self._func = MultiScaleStructuralSimilarityIndexMeasure(
+            data_range=data_range,
+            kernel_size=kernel_size).to(device)
 
     def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
         return 1 - self._func(y_pred, y_true)
@@ -250,7 +252,8 @@ class SSIMLabColorLoss(Metric):
         # You'll need to replace this with your actual SSIM loss function.
         # Example: from pytorch_msssim import SSIM
         # self.ssim_loss = SSIM(data_range=1.0, size_average=True, channel=3)
-        self.ssim_loss = SSIMLoss(device=device)
+        self.ssim_loss = MSSSIMLoss(device=device, 
+                                    kernel_size=[5, 7, 11, 13])  # Using Multi-Scale SSIM for better performance
 
         # Kornia's rgb_to_lab expects input in [0, 1] for RGB.
         # Output L is [0, 100], a* and b* are [-100, 100] typically.
