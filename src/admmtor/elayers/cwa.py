@@ -16,7 +16,7 @@ def astd(x: torch.Tensor) -> torch.Tensor:
     return torch.std(x, dim=(2, 3), keepdim=True) + 1e-5
 
 def amedian(x: torch.Tensor) -> torch.Tensor:
-    return torch.median(x, dim=(2, 3), keepdim=True).values
+    return torch.median(x.flatten().reshape(x.shape[0], x.shape[1], -1), -1).values
 
 def amodes(x: torch.Tensor) -> torch.Tensor:
     # compute the channel-wise mode across spatial dimensions.
@@ -33,10 +33,18 @@ def amodes(x: torch.Tensor) -> torch.Tensor:
     # The copy-to-CPU step has a tiny cost but is far cheaper than a
     # hard crash and has never triggered the bug in our tests.
 
-    if x.shape[2] == 0 or x.shape[3] == 0:
-        return torch.zeros((x.shape[0], x.shape[1], 1, 1), device=x.device)
-    mode_vals = torch.mode(x, dim=(2, 3), keepdim=True).values
-    return mode_vals.to(x.device)
+    flat = x.flatten().reshape(x.shape[0], x.shape[1], -1)
+    if flat.size(-1) == 0:
+        # no spatial elements; return a zero tensor with the proper
+        # batch/channel shape and dtype/device.
+        return torch.zeros(x.shape[0], x.shape[1], device=x.device, dtype=x.dtype)
+
+    if flat.is_cuda:
+        # moving to CPU avoids the problematic CUDA kernel.
+        vals = torch.mode(flat.cpu(), -1).values
+        return vals.to(x.device)
+
+    return torch.mode(flat, -1).values
 
 def amax(x: torch.Tensor) -> torch.Tensor:
     return torch.amax(x, dim=(2, 3), keepdim=True)
