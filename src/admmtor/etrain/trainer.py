@@ -31,11 +31,11 @@ class NNTrainer:
 
     def run(self,
             model: torch.nn.Module,
-            optimizer: torch.optim.Optimizer,
+            optimizer: list[torch.optim.Optimizer],
             epochs: int,
             train_dataloader: DataLoader,
             eval_dataloader: DataLoader = None,
-            lr_scheduler: torch.optim.lr_scheduler.LRScheduler = None):
+            lr_scheduler: list[torch.optim.lr_scheduler.LRScheduler] = None):
         
         # Run dummy forward to initialize lazy modules
         dummy_input = torch.randn(next(iter(train_dataloader))[0].shape, device=next(model.parameters()).device)
@@ -48,11 +48,12 @@ class NNTrainer:
             if eval_dataloader:
                 self.eval(model, eval_dataloader)
             if lr_scheduler is not None:
-                lr_scheduler.step()
+                for scheduler in lr_scheduler:
+                    scheduler.step()
             self.on_epoch_end(epoch, model, optimizer, self.get_epoch_metrics('eval')[self.loss.m_name])
 
 
-    def train(self, model: torch.nn.Module, train_dataloader: DataLoader, optimizer: torch.optim.Optimizer):
+    def train(self, model: torch.nn.Module, train_dataloader: DataLoader, optimizer: list[torch.optim.Optimizer]):
         torch.cuda.empty_cache()
         self.logger.reinit_step_stats()
         model.train(mode=True)
@@ -63,10 +64,12 @@ class NNTrainer:
             labels = labels.to(next(model.parameters()).device)
             outputs = model(inputs)
             loss = self.loss(outputs, labels)
-            optimizer.zero_grad()
+            for opt in optimizer:
+                opt.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=1)
-            optimizer.step()
+            for opt in optimizer:
+                opt.step()
 
             self._update_performance_stats(loss, outputs, labels)
             self._print_current_metrics(pbar)

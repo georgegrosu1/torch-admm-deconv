@@ -21,7 +21,6 @@ from admmtor.eprocessing.etransforms import (
     AddAWGN
     )
 from admmtor.etrain.trainer import NNTrainer
-from admmtor.etrain.custom_opt import MultiOptimizers
 from admmtor.etrain.logger import MetricsLogger
 from admmtor.etrain.saver import NNSaver
 from admmtor.emetrics.metrics import *
@@ -103,12 +102,19 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     # model.apply(clipper)
     # model = ADMMFusion(modeldenoiser, modelresid, freeze_denoiser=True, freeze_denoiser_resid=False)
     model = model.to(device)
-    # Add to AdamW only paramteres that are lower than 2-dimensional (i.e., weights, not biases)
-    opt_adamw = torch.optim.AdamW([param for param in model.parameters() if param.dim() < 2], train_cfg['lr'], betas=(0.9, 0.9))
-    opt_muon = torch.optim.Muon([param for param in model.parameters() if param.dim() >= 2], train_cfg['lr'], betas=(0.9, 0.9))
-    opt = MultiOptimizers([opt_adamw, opt_muon])
+    # 1. Correctly partition the parameters
+    params_1d = [p for p in model.parameters() if p.requires_grad and p.dim() < 2]
+    params_2d = [p for p in model.parameters() if p.requires_grad and p.dim() >= 2]
+    
+    # 2. Instantiate both optimizers independently
+    opt_adamw = torch.optim.AdamW(params_1d, lr=train_cfg['lr'], betas=(0.9, 0.95), weight_decay=0.1)
+    opt_muon = torch.optim.Muon(params_2d, lr=train_cfg['lr'], momentum=0.95) # Note: Muon typically uses standard momentum, not Adam betas
+    
+    opt_adamw = torch.optim.AdamW(opt_adamw, train_cfg['lr'], betas=(0.9, 0.9), eps=1e-12, weight_decay=1e-5)
+    opt_muon = torch.optim.Muon(opt_muon, train_cfg['lr'], betas=(0.9, 0.9))
 
-    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt, T_0=150000, eta_min=1e-11)
+    lr_scheduler_adamw = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt_adamw, T_0=150000, eta_min=1e-11)
+    lr_scheduler_muon = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt_muon, T_0=150000, eta_min=1e-11)
 
     eval_metrics = [PSNRMetric(device), SSIMMetric(device), SCCMetric(device), UIQMetric(device)]
     loss_func = loss_funcs[train_cfg['lossf']](device)
@@ -116,7 +122,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     metrics_logger = MetricsLogger(loss_func, eval_metrics)
     net_trainer = NNTrainer(loss_func, eval_metrics, net_saver, metrics_logger)
 
-    net_trainer.run(model, opt, train_cfg['epochs'], train_loader, eval_loader, lr_scheduler=lr_scheduler)
+    net_trainer.run(model, [opt_adamw, opt_muon], train_cfg['epochs'], train_loader, eval_loader, lr_scheduler=[lr_scheduler_adamw, lr_scheduler_muon])
 
 
 def main():
