@@ -46,19 +46,24 @@ class NNTrainer:
             print(f'\n\n\n/////////////////////////////////// [ EPOCH: {epoch} ] ///////////////////////////////////')
             self.train(model, train_dataloader, optimizer)
             if eval_dataloader:
-                self.eval(model, eval_dataloader, lr_scheduler)
+                self.eval(model, eval_dataloader)
+            if lr_scheduler is not None:
+                lr_scheduler.step()
             self.on_epoch_end(epoch, model, optimizer, self.get_epoch_metrics('eval')[self.loss.m_name])
 
 
     def train(self, model: torch.nn.Module, train_dataloader: DataLoader, optimizer: torch.optim.Optimizer):
+        torch.cuda.empty_cache()
         self.logger.reinit_step_stats()
         model.train(mode=True)
         print('\n [ TRAINING ]')
         pbar = tqdm(enumerate(train_dataloader), total=len(train_dataloader))
         for batch_idx, (inputs, labels) in pbar:
-            optimizer.zero_grad()
+            inputs = inputs.to(next(model.parameters()).device)
+            labels = labels.to(next(model.parameters()).device)
             outputs = model(inputs)
             loss = self.loss(outputs, labels)
+            optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=1)
             optimizer.step()
@@ -95,18 +100,18 @@ class NNTrainer:
 
     def eval(self,
              model: torch.nn.Module,
-             eval_dataloader: DataLoader,
-             lr_scheduler: torch.optim.lr_scheduler.LRScheduler = None):
+             eval_dataloader: DataLoader):
+        torch.cuda.empty_cache()
         self.logger.reinit_step_stats()
         model.eval()
 
         print('\n [ EVALUATING ]')
         with torch.inference_mode():
             for batch_idx, (inputs, labels) in tqdm(enumerate(eval_dataloader), total=len(eval_dataloader)):
+                inputs = inputs.to(next(model.parameters()).device)
+                labels = labels.to(next(model.parameters()).device)
                 outputs = model(inputs)
                 vloss = self.loss(outputs, labels)
-                if lr_scheduler is not None:
-                    lr_scheduler.step()
                 self._update_performance_stats(vloss, outputs, labels)
 
         self.logger('eval')

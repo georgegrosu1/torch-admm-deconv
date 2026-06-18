@@ -1,13 +1,14 @@
 from abc import ABC
 
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 from torchmetrics.image import (StructuralSimilarityIndexMeasure,
                                 MultiScaleStructuralSimilarityIndexMeasure,
                                 PeakSignalNoiseRatio,
                                 UniversalImageQualityIndex,
                                 SpatialCorrelationCoefficient)
 from torchmetrics.regression import MeanSquaredError
-from torchvision.transforms.functional import rgb_to_grayscale
 from kornia.color import rgb_to_lab as kornia_rgb_to_lab
 
 
@@ -30,13 +31,13 @@ class MSE(Metric):
         self._func = MeanSquaredError().to(device)
 
     def __call__(self, y_true: torch.Tensor, y_pred: torch.Tensor):
-        return self._func(y_true, y_pred)
+        return self._func(y_pred, y_true)
 
 
 class SSIMLoss(Metric):
     m_name = 'ssim_loss'
 
-    def __init__(self, device: str, data_range=1.0, kern_size: int = 7):
+    def __init__(self, device: str, data_range=1.0, kern_size: int = 11):
         super().__init__(device)
         self._func = StructuralSimilarityIndexMeasure(data_range=data_range, kernel_size=kern_size).to(device)
 
@@ -57,9 +58,11 @@ class MAELoss(Metric):
 class MSSSIMLoss(Metric):
     m_name = 'mssssim_loss'
 
-    def __init__(self, device: str, data_range=1.0):
+    def __init__(self, device: str, data_range=1.0, kernel_size: int | list[int] = 11):
         super().__init__(device)
-        self._func = MultiScaleStructuralSimilarityIndexMeasure(data_range=data_range).to(device)
+        self._func = MultiScaleStructuralSimilarityIndexMeasure(
+            data_range=data_range,
+            kernel_size=kernel_size).to(device)
 
     def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
         return 1 - self._func(y_pred, y_true)
@@ -147,6 +150,91 @@ class PSNRLoss(Metric):
         assert len(pred.size()) == 4
 
         return self.loss_weight * self.scale * torch.log(((pred - target) ** 2).mean(dim=(1, 2, 3)) + 1e-8).mean()
+    
+    
+class CharbonnierLoss(Metric):
+    """Charbonnier Loss (L1)"""
+    m_name = 'charbonnier_loss'
+
+    def __init__(self, device: str='cuda', eps=1e-3):
+        super(CharbonnierLoss, self).__init__(device)
+        self.device = device
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        diff = x - y
+        loss = torch.mean(torch.sqrt((diff * diff) + (self.eps*self.eps)))
+        return loss
+
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self.forward(y_pred, y_true)
+
+
+class EdgeLoss(nn.Module):
+    m_name = 'edge_loss'
+
+    def __init__(self):
+        super(EdgeLoss, self).__init__()
+        k = torch.Tensor([[.05, .25, .4, .25, .05]])
+        self.kernel = torch.matmul(k.t(), k).unsqueeze(0).repeat(3, 1, 1, 1)
+        if torch.cuda.is_available():
+            self.kernel = self.kernel.cuda()
+        self.loss = CharbonnierLoss()
+
+    def conv_gauss(self, img):
+        n_channels, _, kw, kh = self.kernel.shape
+        img = F.pad(img, (kw//2, kh//2, kw//2, kh//2), mode='replicate')
+        return F.conv2d(img, self.kernel, groups=n_channels)
+
+    def laplacian_kernel(self, current):
+        filtered = self.conv_gauss(current)    # filter
+        down = filtered[:, :, ::2, ::2]               # downsample
+        new_filter = torch.zeros_like(filtered)
+        new_filter[:, :, ::2, ::2] = down * 4                  # upsample
+        filtered = self.conv_gauss(new_filter)  # filter
+        diff = current - filtered
+        return diff
+
+    def forward(self, x, y):
+        loss = self.loss(self.laplacian_kernel(x), self.laplacian_kernel(y))
+        return loss
+
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self.forward(y_pred, y_true)
+
+
+class EdgeCharb(Metric):
+    m_name = 'edge_carb_loss'
+
+    def __init__(self, device: str):
+        super().__init__(device)
+        self._func1 = EdgeLoss().to(device)
+        self._func2 = CharbonnierLoss().to(device)
+
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self._func1(y_pred, y_true) + 0.1 * self._func2(y_pred, y_true)
+    
+    
+class FrequencyLoss(Metric):
+    m_name = 'fft_loss'
+    
+    def __init__(self, device: str='cuda'):
+        super(FrequencyLoss, self).__init__(device)
+        self.loss_fn = nn.L1Loss()
+
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        # Compute 2D Real FFT
+        fft_x = torch.fft.rfft2(y_pred, norm='ortho')
+        fft_y = torch.fft.rfft2(y_true, norm='ortho')
+        
+        # Penalize differences in amplitude (magnitude)
+        mag_x = torch.abs(fft_x)
+        mag_y = torch.abs(fft_y)
+        
+        return self.loss_fn(mag_x, mag_y)
+    
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self.forward(y_pred, y_true)
 
 
 class SSIMLabColorLoss(Metric):
@@ -164,7 +252,8 @@ class SSIMLabColorLoss(Metric):
         # You'll need to replace this with your actual SSIM loss function.
         # Example: from pytorch_msssim import SSIM
         # self.ssim_loss = SSIM(data_range=1.0, size_average=True, channel=3)
-        self.ssim_loss = SSIMLoss(device=device)
+        self.ssim_loss = MSSSIMLoss(device=device, 
+                                    kernel_size=[5, 7, 11, 13])  # Using Multi-Scale SSIM for better performance
 
         # Kornia's rgb_to_lab expects input in [0, 1] for RGB.
         # Output L is [0, 100], a* and b* are [-100, 100] typically.
@@ -213,3 +302,79 @@ class SSIMLabColorLoss(Metric):
                       self.color_weight_l * loss_L)
 
         return total_loss
+    
+    
+class AlternativeSSIMLabColorLoss(Metric):
+    m_name = 'alt_color_lab_loss'
+
+    def __init__(self, device: str='cuda', ssim_weight=1.0, edge_weight=0.1, color_weight=1.0):
+        super(AlternativeSSIMLabColorLoss, self).__init__(device)
+        self.ssim_weight = ssim_weight
+        self.edge_weight = edge_weight
+        self.color_weight = color_weight
+
+        # Base structural losses
+        self.ssim_loss = SSIMLoss(device=device) 
+        self.edge_loss = EdgeLoss()
+        
+        # Color loss
+        self.charbonnier_loss = CharbonnierLoss()
+
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        ssim_loss_val = self.ssim_loss(y_pred, y_true)
+        edge_loss_val = self.edge_loss(y_pred, y_true)
+        color_loss_val = self.charbonnier_loss(y_pred, y_true)
+
+        # 5. Composite Total
+        total_loss = (self.ssim_weight * ssim_loss_val) + \
+                     (self.edge_weight * edge_loss_val) + \
+                     (self.color_weight * color_loss_val)
+                     
+        return total_loss
+    
+    
+class CascadeResidLoss(Metric):
+    m_name = 'cascade_resid_loss'
+    
+    def __init__(self, device: str='cuda'):
+        super(CascadeResidLoss, self).__init__(device)
+        self.loss = SSIMLabColorLoss(device=device)
+        
+    def __call__(self, y_pred: tuple[torch.Tensor, ...], y_true: torch.Tensor):
+        out_denoised = y_pred[0]
+        out_resid = y_pred[1]
+        resid_true = y_true - out_denoised
+        loss_resid = self.loss(out_resid, resid_true)
+        
+        return loss_resid
+    
+    
+class ADMMFusionSSIM(Metric):
+    m_name = 'admm_fusion_ssim'
+    
+    def __init__(self, device: str='cuda'):
+        super(ADMMFusionSSIM, self).__init__(device)
+        self.ssim_metric = SSIMMetric(device=device)
+        
+    def __call__(self, y_pred: tuple[torch.Tensor, ...], y_true: torch.Tensor):
+        out_denoised = y_pred[0]
+        out_resid = y_pred[1]
+        fusion = out_denoised + out_resid
+        ssim_val = self.ssim_metric(fusion, y_true)
+        return ssim_val
+    
+    
+class ADMMFusionPSNR(Metric):
+    m_name = 'admm_fusion_psnr'
+    
+    def __init__(self, device: str='cuda'):
+        super(ADMMFusionPSNR, self).__init__(device)
+        self.psnr_metric = PSNRMetric(device=device)
+        
+    def __call__(self, y_pred: tuple[torch.Tensor, ...], y_true: torch.Tensor):
+        out_denoised = y_pred[0]
+        out_resid = y_pred[1]
+        fusion = out_denoised + out_resid
+        psnr_val = self.psnr_metric(fusion, y_true)
+        return psnr_val
+        

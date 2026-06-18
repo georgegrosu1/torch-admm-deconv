@@ -1,6 +1,6 @@
 import torch
-from torchvision.transforms.functional import crop
-from typing import Tuple
+from torchvision.transforms.functional import crop, rotate
+from torchvision.transforms import RandomRotation
 
 class RandCrop(object):
     def __init__(self, im_shape):
@@ -27,14 +27,34 @@ class RandCrop(object):
 
 
 class Scale(object):
-    def __call__(self, x_img, y_img):
+    def __call__(self, x_img, y_img) -> tuple[torch.Tensor, torch.Tensor]:
         return x_img / 255.0, y_img / 255.0
+    
+    
+class Rotate(object):
+    def __init__(self, degrees: int = 30):
+        self.rotation = RandomRotation(degrees)
+        self.degrees = degrees
+    
+    def __call__(self, x_img, y_img) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.rotation(x_img), self.rotation(y_img)
+    
+    
+class Flip(object):
+    def __call__(self, x_img, y_img) -> tuple[torch.Tensor, torch.Tensor]:
+        if torch.rand(1) < 0.5:
+            x_img = torch.flip(x_img, [-1])
+            y_img = torch.flip(y_img, [-1])
+        if torch.rand(1) < 0.5:
+            x_img = torch.flip(x_img, [-2])
+            y_img = torch.flip(y_img, [-2])
+        return x_img, y_img
 
 
 class AddAWGN(object):
     def __init__(self,
                  mean: float = 0.0,
-                 std_range: Tuple[int, int] = (1, 1),
+                 std_range: tuple[int, int] = (1, 1),
                  minval: float = 0.0,
                  maxval: float = 1.0,
                  both: bool = False):
@@ -45,7 +65,7 @@ class AddAWGN(object):
         self.both = both
 
 
-    def __call__(self, x_img, y_img):
+    def __call__(self, x_img, y_img) -> tuple[torch.Tensor, torch.Tensor]:
         std = torch.randint(self.std_range[0], self.std_range[1], (1,)).item() / 255.0
         awgn = torch.randn(x_img.shape).to(x_img.device) * std + self.mean
         if self.both:

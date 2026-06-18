@@ -1,36 +1,24 @@
+import re
 import torch
 import torch.nn as nn
-from typing import Tuple, List
 
 from admmtor.elayers.admmdeconv import ADMMDeconv
 from admmtor.elayers.attentions import CBAM
-from admmtor.elayers.attentionpool import AttentionChannelPooling
+from admmtor.elayers.channel_pool import ChannelPool
+from admmtor.elayers.cwa import ChannelWiseAttention
+from admmtor.elayers.local_attention_patch import LocalAttentionPatch
+from admmtor.elayers.stats_pool import GeoMeanPool2d, AdaptiveGeoMeanPool2d
+from admmtor.elayers.gating import GeometricGating
+from admmtor.modelbuild.weights_init import default_init_weights
 
 
-def same_padding(input_tensor: torch.Tensor, kernel_size: int) -> torch.Tensor:
-    if isinstance(kernel_size, int):
-        kernel_size = (kernel_size, kernel_size)
-
-    padding_h = (kernel_size[0] - 1) // 2
-    padding_w = (kernel_size[1] - 1) // 2
-
-    # Calculate total padding, assuming odd kernel sizes
-    total_padding = (padding_w, padding_w, padding_h, padding_h)
-
-    # Pad the tensor
-    padded_tensor = nn.functional.pad(input_tensor, total_padding, mode='reflect')
-
-    return padded_tensor
-
-
-def compute_residual_dec_input_channels(enc_out_channels: List[int], dec_out_channels: List[int]) -> List[int]:
+def compute_residual_dec_input_channels(enc_out_channels: list[int], dec_out_channels: list[int]) -> list[int]:
     enc_out_channels_rev = enc_out_channels[::-1]
     return [enc_out_channels_rev[0]] + [enc_out + dec_out for enc_out, dec_out in zip(enc_out_channels_rev[1:],
                                                                               dec_out_channels[:-1])]
 
-
-def compute_enc_input_channels(in_channels: int, enc_out_channels: List[int],
-                               depthwise: bool = False) -> List[int]:
+def compute_enc_input_channels(in_channels: int, enc_out_channels: list[int],
+                               depthwise: bool = False) -> list[int]:
     if depthwise:
         res = [in_channels]
         for i, k in zip(range(len(enc_out_channels)), enc_out_channels):
@@ -38,7 +26,7 @@ def compute_enc_input_channels(in_channels: int, enc_out_channels: List[int],
     return [in_channels] + enc_out_channels[:-1]
 
 
-def compute_depth_enc_in_out_channels(in_channels: int, enc_out_channels: List[int]) -> tuple[list[int], list[int]]:
+def compute_depth_enc_in_out_channels(in_channels: int, enc_out_channels: list[int]) -> tuple[list[int], list[int]]:
     res = [in_channels]
     for i, k in zip(range(len(enc_out_channels)), enc_out_channels):
         res.append(k * res[i])
@@ -188,8 +176,8 @@ class DivergentAttention(nn.Module):
                 self.admms.append(ADMMDeconv(**admms[i]))
 
         for conv in self.convs:
-            default_init_weights(conv)
-        default_init_weights(self.convout)
+            default_init_weights(conv, ['weight', 'bias'])
+        default_init_weights(self.convout, ['weight', 'bias'])
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
         if self.admms is not None:
@@ -208,7 +196,7 @@ class UpDownBlock(nn.Module):
     def __init__(self,
                  up_in_ch: int, up_out_ch: int,
                  down_out_ch: int,
-                 kernel_size: int | Tuple[int, int],
+                 kernel_size: int | tuple[int, int],
                  activation: nn.Module = None,
                  normalization: nn.Module = None,
                  pool_size: int = 0):
@@ -230,24 +218,42 @@ class UpDownBlock(nn.Module):
         return res + self.chc2(x)
 
 
-class MultiScaleConvPool(nn.Module):
+class LazyMultiReceptiveFieldsConv(nn.Module):
     def __init__(self,
-                 in_channels: int,
                  out_channels: int,
-                 filters: int,
-                 ks: list[int]):
-        super(MultiScaleConvPool, self).__init__()
+                 kernel_size: int,
+                 rfs: list[int],
+        ):
+        super(LazyMultiReceptiveFieldsConv, self).__init__()
         self.convs = nn.ModuleList()
-        self.ks = ks
-        for i in range(len(ks)):
-            self.convs.append(nn.Conv2d(in_channels=in_channels, out_channels=filters, kernel_size=ks[i], stride=1,
-                                        bias=True))
-        self.cwa_pool = AttentionChannelPooling(in_channels=filters * len(ks), select_channels=out_channels)
+        self.kernel_size = kernel_size
+        self.out_channels = out_channels
+        self.rfs = rfs
+        self.pool_out = None # Initialize as None for lazy loading
+
+        for r in rfs:
+            self.convs.append(nn.LazyConv2d(out_channels=out_channels,
+                                            kernel_size=kernel_size,
+                                            stride=1,
+                                            dilation=r,
+                                            padding='same',
+                                            padding_mode='circular',
+                                            bias=False))
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = torch.cat([conv(same_padding(x, ks)) for conv, ks in zip(self.convs, self.ks)], dim=1)
-        return self.cwa_pool(x)
+        out = torch.cat([conv(x) for conv in self.convs], dim=1)
 
+        if self.pool_out is None:
+            # Lazy initialization of ChannelPool
+            # The in_channels for ChannelPool will be the sum of out_channels from all convolutions
+            channel_pool_in_channels = self.out_channels * len(self.convs)
+            self.pool_out = ChannelPool(top_k=self.out_channels, soft=True,
+                                        differentiable=True, in_channels=channel_pool_in_channels).to(x.device)
+            for conv in self.convs:
+                default_init_weights(conv, ['weight', 'bias'])
+
+        return self.pool_out(out)
+    
 
 class MultiADMM(nn.Module):
     def __init__(self,
@@ -265,7 +271,7 @@ class DownBlock(nn.Module):
     def __init__(self,
                  in_channels: int,
                  out_channels: int,
-                 kernel_size: int | Tuple[int, int],
+                 kernel_size: int | tuple[int, int],
                  activation: nn.Module = None,
                  normalization: nn.Module = None,
                  pool_size: int = 0):
@@ -273,7 +279,7 @@ class DownBlock(nn.Module):
         kernel_size = kernel_size if isinstance(kernel_size, tuple) else (kernel_size, kernel_size)
         self.down_conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
                                    stride=1, padding=max(0, pool_size-1), padding_mode='zeros', bias=False)
-        default_init_weights(self.down_conv)
+        default_init_weights(self.down_conv, ['weight', 'bias'])
 
         self.normalization = normalization
         self.activation = activation
@@ -292,7 +298,7 @@ class UpBlock(nn.Module):
     def __init__(self,
                  in_channels: int,
                  out_channels: int,
-                 kernel_size: int | Tuple[int, int],
+                 kernel_size: int | tuple[int, int],
                  activation: nn.Module = None,
                  normalization: nn.Module = None,
                  pool_size: int = 0):
@@ -300,7 +306,7 @@ class UpBlock(nn.Module):
 
         self.up_conv = nn.ConvTranspose2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
                                           stride=1, bias=False)
-        default_init_weights(self.up_conv)
+        default_init_weights(self.up_conv, ['weight', 'bias'])
 
         self.normalization = normalization
         self.max_pool = nn.MaxPool2d(kernel_size=pool_size, stride=1) if pool_size != 0 else None
@@ -315,38 +321,279 @@ class UpBlock(nn.Module):
         return x
 
 
-class DepthwiseDownBlock(nn.Module):
+class BaseMRF(nn.Module):
     def __init__(self,
-                 in_channels: int,
                  out_channels: int,
-                 kernel_size: int | Tuple[int, int],
-                 activation: nn.Module = None,
-                 pool_size: int = 0,
-                 use_bias: bool = True):
-        super(DepthwiseDownBlock, self).__init__()
-
-        print(out_channels, in_channels)
-
-        self.depth_conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                                    kernel_size=kernel_size, padding=max(0, pool_size-1),
-                                    padding_mode='zeros', bias=use_bias, groups=in_channels)
-        default_init_weights(self.depth_conv, {'a': 0, 'mode': 'fan_in', 'nonlinearity': 'relu'})
-
-        self.activation = activation
-        self.max_pool = nn.MaxPool2d(kernel_size=pool_size, stride=1) if pool_size != 0 else None
-
+                 kernel_size: int,
+                 rfs: list[int],
+                 lap_patch_size: int = 64,
+                 lap_num_processors: int = 16
+        ):
+        super(BaseMRF, self).__init__()
+        
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.rfs = rfs
+        
+        self.lap_patch_size = lap_patch_size
+        self.lap_stride = lap_patch_size
+        self.lap_num_processors = lap_num_processors
+        self.lap = LocalAttentionPatch(
+            patch_size=self.lap_patch_size,
+            stride=self.lap_stride,
+            num_processors=self.lap_num_processors,
+            out_channels=self.out_channels,
+        )
+        self.mrf_1 = LazyMultiReceptiveFieldsConv(
+            out_channels=self.out_channels, 
+            kernel_size=self.kernel_size, 
+            rfs=rfs
+            )
+        self.activ = nn.RReLU(inplace=True)
+        
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.depth_conv(x)
-        x = self.activation(x) if self.activation is not None else x
-        x = self.max_pool(x) if self.max_pool is not None else x
-        return x
+        out = self.lap(x)
+        out = self.mrf_1(out)
+        out = self.activ(out)
+        return out + x
+    
+    
+class UpMRF(BaseMRF):
+    def __init__(self,
+                 out_channels: int,
+                 kernel_size: int,
+                 rfs: list[int],
+                 increase_k: bool = True,
+                 increase_rfs: bool = True,
+                 up_dilation: int = 5
+        ):
+        super(UpMRF, self).__init__(
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            rfs=rfs,
+            increase_k=increase_k,
+            increase_rfs=increase_rfs
+        )
+        self.up_dilation = up_dilation
+        self.up = nn.ConvTranspose2d(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            dilation=up_dilation,
+            stride=1
+        )
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = super(UpMRF, self).forward(x)
+        out = self.up(out)
+        return out
+    
+    
+class DownMRF(BaseMRF):
+    def __init__(self,
+                 out_channels: int,
+                 kernel_size: int,
+                 rfs: list[int],
+                 increase_k: bool = True,
+                 increase_rfs: bool = True,
+                 down_dilation: int = 5
+        ):
+        super(DownMRF, self).__init__(
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            rfs=rfs,
+            increase_k=increase_k,
+            increase_rfs=increase_rfs
+        )
+        self.down_dilation = down_dilation
+        self.down = nn.Conv2d(
+            in_channels=out_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            dilation=down_dilation,
+            stride=1,
+            bias=True
+        )
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out = super(DownMRF, self).forward(x)
+        out = self.down(out)
+        return out
+    
+    
+class CoarseBlock(nn.Module):
+    def __init__(self,
+                 channels: int,
+                 c_mul: int = 2,
+        ):
+        super(CoarseBlock, self).__init__()
+        self.channels = channels
+        self.ch_cmul = channels * c_mul
+        
+        self.norm1 = LayerNorm2d(channels)
+        self.norm2 = LayerNorm2d(channels)
+        self.conv1 = nn.Conv2d(in_channels=channels, out_channels=self.ch_cmul, 
+                               kernel_size=2, padding='same', padding_mode='circular', bias=True)
+        self.conv2 = nn.Conv2d(in_channels=self.ch_cmul, out_channels=self.ch_cmul, 
+                               kernel_size=2, padding='same', padding_mode='circular', bias=True)
+        
+        self.conv3 = nn.Conv2d(in_channels=channels, out_channels=self.ch_cmul, kernel_size=1, bias=True)
+        self.conv4 = nn.Conv2d(in_channels=self.ch_cmul, out_channels=self.ch_cmul, kernel_size=1, bias=True)
+        
+        self.ch_att = ChannelWiseAttention(in_channels=channels, probas_ch_factor=2)
+        
+        self.ch_pool1 = ChannelPool(top_k=channels, temperature=0.8, soft=True, in_channels=self.ch_cmul)
+        self.ch_pool2 = ChannelPool(top_k=channels, temperature=0.8, soft=True, in_channels=self.ch_cmul)
+        
+        self.gate = GeometricGating()
+        self.alfa = nn.Parameter(torch.zeros((1, channels, 1, 1)), requires_grad=True)
+        self.beta = nn.Parameter(torch.zeros((1, channels, 1, 1)), requires_grad=True)
+        
+        self.apply(default_init_weights)
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out1 = self.norm1(x)
+        out1 = self.conv1(out1)
+        out1 = self.conv2(out1)
+        out1 = self.gate(out1)
+        out1 = self.ch_pool1(out1)
+        out1 = self.ch_att(out1)
+        out1 = out1 + x * self.alfa
+        
+        out2 = self.norm2(out1)
+        out2 = self.conv3(out2)
+        out2 = self.conv4(out2)
+        out2 = self.gate(out2)
+        out2 = self.ch_pool2(out2)
+        out2 = self.ch_att(out2)
+        return out2 + x * self.beta
+    
 
-
-@torch.no_grad()
-def default_init_weights(nn_modules: nn.Module | list[nn.Module]):
-    nn_modules = nn_modules if isinstance(nn_modules, list) else [nn_modules]
-    for nn_module in nn_modules:
-        if isinstance(nn_module, nn.Conv2d) or isinstance(nn_module, nn.ConvTranspose2d):
-            nn.init.xavier_normal_(nn_module.weight)
-            if nn_module.bias is not None:
-                nn_module.bias.data.fill_(0)
+class FineBlock(nn.Module):
+    def __init__(self,
+                 channels: int,
+                 c_mul: int = 2,
+        ):
+        super(FineBlock, self).__init__()
+        self.channels = channels
+        self.ch_cmul = channels * c_mul
+        
+        self.norm1 = LayerNorm2d(channels)
+        self.norm2 = LayerNorm2d(channels)
+        
+        self.conv1 = nn.Conv2d(in_channels=channels, out_channels=self.ch_cmul, 
+                               kernel_size=1, bias=True)
+        self.conv2 = nn.Conv2d(in_channels=self.ch_cmul, out_channels=self.ch_cmul, 
+                               kernel_size=2, padding='same', padding_mode='circular', bias=True)
+        self.ch_pool1 = ChannelPool(top_k=channels, temperature=0.8, soft=True, in_channels=self.ch_cmul)
+        self.conv3 = nn.Conv2d(in_channels=channels, out_channels=self.ch_cmul, kernel_size=1, bias=True)
+        self.conv4 = nn.Conv2d(in_channels=self.ch_cmul, out_channels=self.ch_cmul, 
+                               kernel_size=2, padding='same', padding_mode='circular', bias=True)
+        self.ch_pool2 = ChannelPool(top_k=channels, temperature=0.8, soft=True, in_channels=self.ch_cmul)
+        
+        self.lap1 = LocalAttentionPatch(in_channels=channels, out_channels=channels, patch_size=64,
+                                        embedding_dim=16, downscale_levels=4, downscale_kernel=2, downscale_stride=2)
+        
+        self.serial_cbam = nn.Sequential(
+            CBAM(gate_channels=channels, reduction_ratio=4, pool_types=('avg', 'max'), use_spatial=True),
+            CBAM(gate_channels=channels, reduction_ratio=4, pool_types=('lp', 'lse'), use_spatial=True)
+        )
+        self.parallel_cbam = nn.ModuleList([
+            CBAM(gate_channels=channels, reduction_ratio=8, pool_types=('avg', 'max'), use_spatial=True),
+            CBAM(gate_channels=channels, reduction_ratio=8, pool_types=('lp', 'lse'), use_spatial=True)
+        ])
+        self.ch_pool3 = ChannelPool(top_k=channels, temperature=0.8, soft=True, in_channels=3*self.channels)
+        self.gate = GeometricGating()
+        self.alfa = nn.Parameter(torch.zeros((1, channels, 1, 1)), requires_grad=True)
+        
+        
+    def _forward_parallel_cbam(self, x: torch.Tensor) -> torch.Tensor:
+        out1 = self.parallel_cbam[0](x)
+        out2 = self.parallel_cbam[1](x)
+        return torch.cat([out1, out2], dim=1)
+        
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        out1 = self.norm1(x)
+        out1 = self.conv1(out1)
+        out1 = self.conv2(out1)
+        out1 = self.gate(out1)
+        out1 = self.ch_pool1(out1)
+        out1 = self.serial_cbam(out1)
+        
+        out2 = self.norm2(x)
+        out2 = self.conv3(out2)
+        out2 = self.conv4(out2)
+        out2 = self.gate(out2)
+        out2 = self.ch_pool2(out2)
+        out2 = self._forward_parallel_cbam(out2)
+        
+        out = self.ch_pool3(torch.cat([out1, out2], dim=1))
+        out = self.lap1(out)
+        return out + x * self.alfa
+    
+    
+class FusionBlock(nn.Module):
+    def __init__(self,
+                 xin_channels: int,
+                 filters: int,
+                 out_channels: int | None = None,
+                 c_mul: int = 2
+        ):
+        super(FusionBlock, self).__init__()
+        self.xin_channels = xin_channels
+        self.filters = filters
+        self.out_channels = out_channels if out_channels is not None else filters
+        self.ch_cmul = c_mul
+        self.in_wfilters = xin_channels + filters
+        self.cmul_filters = filters * c_mul
+        
+        self.conv1_coarse = nn.Conv2d(in_channels=self.in_wfilters, out_channels=self.cmul_filters, kernel_size=1, bias=True)
+        self.conv2_coarse = nn.Conv2d(in_channels=self.cmul_filters, out_channels=self.cmul_filters, kernel_size=1, bias=True)
+        self.ch_pool_coarse = ChannelPool(top_k=filters, temperature=0.8, soft=True, in_channels=self.cmul_filters)
+        
+        self.conv1_fine = nn.Conv2d(in_channels=self.in_wfilters, out_channels=self.cmul_filters, kernel_size=1, bias=True)
+        self.conv2_fine = nn.Conv2d(in_channels=self.cmul_filters, out_channels=self.cmul_filters, kernel_size=1, bias=True)
+        self.ch_pool_fine = ChannelPool(top_k=filters, temperature=0.8, soft=True, in_channels=self.cmul_filters)
+        
+        self.conv1_fusion = nn.Conv2d(in_channels=2*self.filters, out_channels=self.cmul_filters, kernel_size=1, bias=True)
+        self.conv2_fusion = nn.Conv2d(in_channels=self.cmul_filters, out_channels=self.cmul_filters, kernel_size=1, bias=True)
+        self.ch_pool_fusion = ChannelPool(top_k=filters, temperature=0.8, soft=True, in_channels=self.cmul_filters)
+        
+        self.gate = GeometricGating()
+        
+        self.lap_fusion = LocalAttentionPatch(in_channels=self.filters, 
+                                              out_channels=self.filters, 
+                                              patch_size=64,
+                                              embedding_dim=16,
+                                              downscale_levels=4,
+                                              downscale_kernel=2,
+                                              downscale_stride=2)
+        self.lap_out = LocalAttentionPatch(in_channels=self.filters, 
+                                           out_channels=self.out_channels, 
+                                           patch_size=128,
+                                           embedding_dim=16,
+                                           downscale_levels=4,
+                                           downscale_kernel=2,
+                                           downscale_stride=2)
+        
+        self.activation = nn.Sigmoid()
+        
+    def forward(self, x: torch.Tensor, coarse: torch.Tensor, fine: torch.Tensor) -> torch.Tensor:
+        coarse = self.conv1_coarse(torch.cat([x, coarse], dim=1))
+        coarse = self.conv2_coarse(coarse)
+        coarse = self.gate(coarse)
+        coarse = self.ch_pool_coarse(coarse)
+        
+        fine = self.conv1_fine(torch.cat([x, fine], dim=1))
+        fine = self.conv2_fine(fine)
+        fine = self.gate(fine)
+        fine = self.ch_pool_fine(fine)
+        
+        fusion = torch.cat([coarse, fine], dim=1)
+        fusion = self.conv1_fusion(fusion)
+        fusion = self.conv2_fusion(fusion)
+        fusion = self.gate(fusion)
+        fusion = self.ch_pool_fusion(fusion)
+        fusion = self.lap_fusion(fusion)
+        fusion = self.lap_out(fusion)
+        return self.activation(fusion)

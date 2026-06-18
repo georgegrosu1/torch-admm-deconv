@@ -1,0 +1,30 @@
+{
+  "model_params":{
+    "upscale": 1,
+    "in_chans": 3,
+    "img_size": 128,
+    "window_size": 8,
+    "img_range": 1.0,
+    "depths": [6, 6, 6, 6, 6, 6],
+    "embed_dim": 180,
+    "num_heads": [6, 6, 6, 6, 6, 6],
+    "mlp_ratio": 2,
+    "upsampler": null,
+    "resi_connection": "1conv"
+  },
+  "train": {
+    "ckpt": null,
+    "x_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\train\\y",
+    "y_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\train\\y",
+    "batch_size": 2
+  },
+  "eval": {
+    "x_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\test\\y",
+    "y_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\test\\y",
+    "batch_size": 2
+  },
+  "im_shape": [128, 128],
+  "lossf": "charbonnier",
+  "lr": 2e-4,
+  "epochs": 500
+}
