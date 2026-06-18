@@ -21,6 +21,7 @@ from admmtor.eprocessing.etransforms import (
     AddAWGN
     )
 from admmtor.etrain.trainer import NNTrainer
+from admmtor.etrain.custom_opt import MultiOptimizers
 from admmtor.etrain.logger import MetricsLogger
 from admmtor.etrain.saver import NNSaver
 from admmtor.emetrics.metrics import *
@@ -102,7 +103,10 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     # model.apply(clipper)
     # model = ADMMFusion(modeldenoiser, modelresid, freeze_denoiser=True, freeze_denoiser_resid=False)
     model = model.to(device)
-    opt = torch.optim.AdamW(model.parameters(), train_cfg['lr'], betas=(0.9, 0.9))
+    # Add to AdamW only paramteres that are lower than 2-dimensional (i.e., weights, not biases)
+    opt_adamw = torch.optim.AdamW([param for param in model.parameters() if param.dim() < 2], train_cfg['lr'], betas=(0.9, 0.9))
+    opt_muon = torch.optim.Muon([param for param in model.parameters() if param.dim() >= 2], train_cfg['lr'], betas=(0.9, 0.9))
+    opt = MultiOptimizers([opt_adamw, opt_muon])
 
     lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt, T_0=150000, eta_min=1e-11)
 
