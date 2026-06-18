@@ -103,15 +103,12 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     # model = ADMMFusion(modeldenoiser, modelresid, freeze_denoiser=True, freeze_denoiser_resid=False)
     model = model.to(device)
     # 1. Correctly partition the parameters
-    params_1d = [p for p in model.parameters() if p.requires_grad and p.dim() < 2]
-    params_2d = [p for p in model.parameters() if p.requires_grad and p.dim() >= 2]
+    params_1d = [p for p in model.parameters() if p.requires_grad and p.dim() != 2]
+    params_2d = [p for p in model.parameters() if p.requires_grad and p.dim() == 2]
     
     # 2. Instantiate both optimizers independently
-    opt_adamw = torch.optim.AdamW(params_1d, lr=train_cfg['lr'], betas=(0.9, 0.95), weight_decay=0.1)
-    opt_muon = torch.optim.Muon(params_2d, lr=train_cfg['lr'], momentum=0.95) # Note: Muon typically uses standard momentum, not Adam betas
-    
-    opt_adamw = torch.optim.AdamW(opt_adamw, train_cfg['lr'], betas=(0.9, 0.9), eps=1e-12, weight_decay=1e-5)
-    opt_muon = torch.optim.Muon(opt_muon, train_cfg['lr'], betas=(0.9, 0.9))
+    opt_adamw = torch.optim.AdamW(params_1d, train_cfg['lr'], betas=(0.9, 0.9), eps=1e-12, weight_decay=1e-5)
+    opt_muon = torch.optim.Muon(params_2d, train_cfg['lr'], momentum=0.95, weight_decay=1e-5)
 
     lr_scheduler_adamw = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt_adamw, T_0=150000, eta_min=1e-11)
     lr_scheduler_muon = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt_muon, T_0=150000, eta_min=1e-11)
