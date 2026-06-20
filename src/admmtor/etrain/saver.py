@@ -44,11 +44,18 @@ class NNSaver:
         self._losses = np.append(self._losses, vloss)
 
 
-    def save_model(self, epoch: int, model: torch.nn.Module , optimizer, vloss: float):
+    def save_model(self, epoch: int, model: torch.nn.Module, optimizer, vloss: float):
         model_path = str(self.model_saving_path).format(epoch=epoch, val_loss=vloss) + '.tar'
+        
+        # Check if we have a list of optimizers or a single one
+        if isinstance(optimizer, list):
+            opt_state_dict = [opt.state_dict() for opt in optimizer]
+        else:
+            opt_state_dict = optimizer.state_dict()
+
         torch.save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
+            'optimizer_state_dict': opt_state_dict,
             'loss': vloss
         }, model_path)

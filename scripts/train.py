@@ -3,10 +3,13 @@ import cv2
 import json
 import random
 import argparse
+import warnings
 import numpy as np
 from pathlib import Path
-import torch
-torch.set_flush_denormal(True)
+warnings.filterwarnings(
+    "ignore", 
+    message="Importing from timm.models.layers is deprecated, please import via timm.layers"
+    )
 
 from admmtor.eprocessing.dataload import ImageDataset
 from admmtor.modelbuild.denoiser import DivergentRestorer, DivergentRestorerResid
@@ -76,10 +79,10 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
                              transforms=transforms)
     train_loader = torch.utils.data.DataLoader(
         train_dset, shuffle=True, batch_size=train_cfg['train']['batch_size'], 
-        persist_workers=True, pin_memory=True, num_workers=4)
+        pin_memory=True, num_workers=4)
     eval_loader = torch.utils.data.DataLoader(
         eval_dset, shuffle=True, batch_size=train_cfg['eval']['batch_size'], 
-        persist_workers=True, pin_memory=True, num_workers=4)
+        pin_memory=True, num_workers=4)
 
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
