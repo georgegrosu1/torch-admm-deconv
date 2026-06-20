@@ -95,10 +95,10 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     # model = SwinIR(**train_cfg['model_params'])
 
     if train_cfg['train']['ckpt'] is not None:
-        modeldenoiser = DivergentRestorer(**train_cfg['model_params'])
+        # modeldenoiser = DivergentRestorer(**train_cfg['model_params'])
         print("!!!!! LOADING CKPT !!!!!!!")
         checkpoint = torch.load(train_cfg['train']['ckpt'], weights_only=False, map_location=device)
-        modeldenoiser.load_state_dict(checkpoint['model_state_dict'])
+        model.load_state_dict(checkpoint['model_state_dict'])
         # Freeze all
         # print('WITH FROZEN!!!!')
         # for param in entry_model.parameters():
