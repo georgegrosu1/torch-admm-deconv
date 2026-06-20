@@ -21,11 +21,11 @@ class NNSaver:
         self._losses = np.array([])
 
 
-    def save_on_epoch_end(self, epoch: int, model: torch.nn.Module , optimizer, vloss: float, log_metrics: Dict = None):
+    def save_on_epoch_end(self, epoch: int, model: torch.nn.Module , optimizer, lr_schedulers, vloss: float, log_metrics: Dict = None):
         if self.save_mode == SaveMode.Each:
-            self.save_model(epoch, model, optimizer, vloss)
+            self.save_model(epoch, model, optimizer, lr_schedulers, vloss)
         elif self.save_mode == SaveMode.Best:
-            self.save_if_best(epoch, model, optimizer, vloss)
+            self.save_if_best(epoch, model, optimizer, lr_schedulers, vloss)
         else:
             raise NotImplementedError
 
@@ -34,28 +34,35 @@ class NNSaver:
             pd.DataFrame(log_metrics).to_csv(csv_path)
 
 
-    def save_if_best(self, epoch: int, model: torch.nn.Module , optimizer, vloss: float):
+    def save_if_best(self, epoch: int, model: torch.nn.Module , optimizer, lr_schedulers, vloss: float):
         if self._losses.size == 0:
-            self.save_model(epoch, model, optimizer, vloss)
+            self.save_model(epoch, model, optimizer, lr_schedulers, vloss)
         else:
             greater_losses = self._losses > vloss
             if greater_losses.sum() == self._losses.shape[0]:
-                self.save_model(epoch, model, optimizer, vloss)
+                self.save_model(epoch, model, optimizer, lr_schedulers, vloss)
         self._losses = np.append(self._losses, vloss)
 
 
-    def save_model(self, epoch: int, model: torch.nn.Module, optimizer, vloss: float):
+    def save_model(self, epoch: int, model: torch.nn.Module, optimizer, lr_schedulers, vloss: float):
         model_path = str(self.model_saving_path).format(epoch=epoch, val_loss=vloss) + '.tar'
         
-        # Check if we have a list of optimizers or a single one
+        # Handle single vs. list for Optimizers
         if isinstance(optimizer, list):
             opt_state_dict = [opt.state_dict() for opt in optimizer]
         else:
             opt_state_dict = optimizer.state_dict()
 
+        # Handle single vs. list for Schedulers
+        if isinstance(lr_schedulers, list):
+            sched_state_dict = [sched.state_dict() for sched in lr_schedulers]
+        else:
+            sched_state_dict = lr_schedulers.state_dict()
+
         torch.save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': opt_state_dict,
+            'scheduler_state_dict': sched_state_dict,
             'loss': vloss
         }, model_path)

@@ -6,6 +6,7 @@ import argparse
 import warnings
 import numpy as np
 from pathlib import Path
+from typing import Union
 warnings.filterwarnings(
     "ignore", 
     message="Importing from timm.models.layers is deprecated, please import via timm.layers"
@@ -63,6 +64,46 @@ loss_funcs = {
 }
 
 
+def load_model_from_ckpt(
+    model: torch.nn.Module, 
+    optimizers: Union[list, torch.optim.Optimizer], 
+    lr_schedulers: Union[list, object], # Object used here as PyTorch scheduler base classes vary
+    ckpt_path: str, 
+    device: str
+):
+    print(f"Loading checkpoint from {ckpt_path}...")
+    checkpoint = torch.load(ckpt_path, map_location=device)
+    
+    # 1. Load Model State
+    model.load_state_dict(checkpoint['model_state_dict'])
+
+    # 2. Load Optimizer State(s)
+    if isinstance(optimizers, list):
+        for opt, state in zip(optimizers, checkpoint['optimizer_state_dict']):
+            opt.load_state_dict(state)
+    else:
+        optimizers.load_state_dict(checkpoint['optimizer_state_dict'])
+        
+    # 3. Load Scheduler State(s)
+    if 'scheduler_state_dict' in checkpoint:
+        if isinstance(lr_schedulers, list):
+            for sched, state in zip(lr_schedulers, checkpoint['scheduler_state_dict']):
+                sched.load_state_dict(state)
+        else:
+            lr_schedulers.load_state_dict(checkpoint['scheduler_state_dict'])
+        print("Successfully loaded scheduler states.")
+    else:
+        print("Warning: 'scheduler_state_dict' not found in this checkpoint. Schedulers will start from scratch.")
+
+    # 4. Extract metadata for resuming training
+    start_epoch = checkpoint.get('epoch', 0)
+    val_loss = checkpoint.get('loss', None)
+    
+    print(f"Resuming from Epoch {start_epoch} with Val Loss: {val_loss}")
+    
+    return model, optimizers, lr_schedulers
+
+
 def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, model_name: str, device: str,
                   model_ckpt: str = None):
     config_file_path = os.getcwd() + f'/{config_file}'
@@ -88,7 +129,7 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     net_saver = NNSaver(save_dir_path, model_name)
     
     model = DivergentRestorer(**train_cfg['model_params'])
-    
+    model.to(device)
     # model = ANet(**train_cfg['model_params'])
     
     # model = NAFNet(img_channel=3, width=64, middle_blk_num=12,
@@ -97,38 +138,36 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     # model = make_dranet(train_cfg['model_params'])
     # model = SwinIR(**train_cfg['model_params'])
 
-    if train_cfg['train']['ckpt'] is not None:
-        # modeldenoiser = DivergentRestorer(**train_cfg['model_params'])
-        print("!!!!! LOADING CKPT !!!!!!!")
-        checkpoint = torch.load(train_cfg['train']['ckpt'], weights_only=False, map_location=device)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        # Freeze all
-        # print('WITH FROZEN!!!!')
-        # for param in entry_model.parameters():
-        #     param.requires_grad = False
-
-    # clipper = WeightClipper()
-    # model.apply(clipper)
-    # model = ADMMFusion(modeldenoiser, modelresid, freeze_denoiser=True, freeze_denoiser_resid=False)
-    model = model.to(device)
-    # 1. Correctly partition the parameters
     params_1d = [p for p in model.parameters() if p.requires_grad and p.dim() != 2]
     params_2d = [p for p in model.parameters() if p.requires_grad and p.dim() == 2]
     
-    # 2. Instantiate both optimizers independently
     opt_adamw = torch.optim.AdamW(params_1d, train_cfg['lr'], betas=(0.9, 0.9), eps=1e-12, weight_decay=1e-5)
     opt_muon = torch.optim.Muon(params_2d, train_cfg['lr'], momentum=0.95, weight_decay=1e-5)
 
     lr_scheduler_adamw = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt_adamw, T_0=150000, eta_min=1e-11)
     lr_scheduler_muon = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt_muon, T_0=150000, eta_min=1e-11)
+    
+    # Group them into lists for cleaner passing
+    optimizers_list = [opt_adamw, opt_muon]
+    schedulers_list = [lr_scheduler_adamw, lr_scheduler_muon]
 
+    # 2. THEN, if a checkpoint exists, load the states INTO the objects
+    if train_cfg['train']['ckpt'] is not None:
+        model, optimizers_list, schedulers_list = load_model_from_ckpt(
+            model,
+            optimizers_list,
+            schedulers_list,
+            train_cfg['train']['ckpt'],
+            device
+        )
+    
     eval_metrics = [PSNRMetric(device), SSIMMetric(device), SCCMetric(device), UIQMetric(device)]
     loss_func = loss_funcs[train_cfg['lossf']](device)
 
     metrics_logger = MetricsLogger(loss_func, eval_metrics)
     net_trainer = NNTrainer(loss_func, eval_metrics, net_saver, metrics_logger)
 
-    net_trainer.run(model, [opt_adamw, opt_muon], train_cfg['epochs'], train_loader, eval_loader, lr_scheduler=[lr_scheduler_adamw, lr_scheduler_muon])
+    net_trainer.run(model, optimizers_list, train_cfg['epochs'], train_loader, eval_loader, lr_scheduler=schedulers_list)
 
 
 def main():
