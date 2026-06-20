@@ -65,13 +65,18 @@ class NNTrainer:
             outputs = model(inputs)
             loss = self.loss(outputs, labels)
             for opt in optimizer:
-                opt.zero_grad()
+                opt.zero_grad(set_to_none=True)
             loss.backward()
-            torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=1)
+            torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=2)
             for opt in optimizer:
                 opt.step()
 
-            self._update_performance_stats(loss, outputs, labels)
+            # --- FIX: Detach and move to CPU ---
+            outputs_cpu = outputs.detach().cpu()
+            labels_cpu = labels.detach().cpu()
+
+            # Pass the safe CPU data
+            self._update_performance_stats(loss.item(), outputs_cpu, labels_cpu)
             self._print_current_metrics(pbar)
 
         self.logger('train')
@@ -79,7 +84,7 @@ class NNTrainer:
 
 
     def _update_performance_stats(self, loss_res, outputs, labels):
-        self.logger.update_step_metric_val(self.loss.m_name, loss_res.item())
+        self.logger.update_step_metric_val(self.loss.m_name, loss_res)
         for metric_func in self.metrics:
             metric_res = metric_func(outputs, labels).item()
             self.logger.update_step_metric_val(metric_func.m_name, metric_res)
@@ -114,8 +119,13 @@ class NNTrainer:
                 inputs = inputs.to(next(model.parameters()).device)
                 labels = labels.to(next(model.parameters()).device)
                 outputs = model(inputs)
-                vloss = self.loss(outputs, labels)
-                self._update_performance_stats(vloss, outputs, labels)
+                
+                vloss_cpu = self.loss(outputs, labels).item()
+                outputs_cpu = outputs.detach().cpu()
+                labels_cpu = labels.detach().cpu()
+                
+                # Pass the safe, lightweight CPU data to your stats collector
+                self._update_performance_stats(vloss_cpu, outputs_cpu, labels_cpu)
 
         self.logger('eval')
         self._print_epoch_metrics('eval')
