@@ -44,16 +44,14 @@ class NNTrainer:
         self.get_model_params(model)
         for epoch in range(epochs):
             print(f'\n\n\n/////////////////////////////////// [ EPOCH: {epoch} ] ///////////////////////////////////')
-            self.train(model, train_dataloader, optimizer)
+            self.train(model, train_dataloader, optimizer, lr_scheduler)
             if eval_dataloader:
                 self.eval(model, eval_dataloader)
-            if lr_scheduler is not None:
-                for scheduler in lr_scheduler:
-                    scheduler.step()
-            self.on_epoch_end(epoch, model, optimizer, self.get_epoch_metrics('eval')[self.loss.m_name])
+            self.on_epoch_end(epoch, model, optimizer, lr_scheduler, self.get_epoch_metrics('eval')[self.loss.m_name])
 
 
-    def train(self, model: torch.nn.Module, train_dataloader: DataLoader, optimizer: list[torch.optim.Optimizer]):
+    def train(self, model: torch.nn.Module, train_dataloader: DataLoader,
+              optimizer: list[torch.optim.Optimizer], lr_scheduler: list[torch.optim.lr_scheduler]):
         torch.cuda.empty_cache()
         self.logger.reinit_step_stats()
         model.train(mode=True)
@@ -67,9 +65,12 @@ class NNTrainer:
             for opt in optimizer:
                 opt.zero_grad(set_to_none=True)
             loss.backward()
-            torch.nn.utils.clip_grad_value_(model.parameters(), clip_value=2)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             for opt in optimizer:
                 opt.step()
+            if lr_scheduler is not None:
+                for scheduler in lr_scheduler:
+                    scheduler.step()
 
             # --- FIX: Detach and move to CPU ---
             outputs_cpu = outputs.detach().cpu()
@@ -146,6 +147,6 @@ class NNTrainer:
         return total_params
 
 
-    def on_epoch_end(self, epoch, model, optimizer, loss_val):
+    def on_epoch_end(self, epoch, model, optimizer, lr_schedulers, loss_val):
         logs_dict = self.logger.get_logged(reformat=True) if self.logger is not None else None
-        self.saver.save_on_epoch_end(epoch, model, optimizer, loss_val, logs_dict)
+        self.saver.save_on_epoch_end(epoch, model, optimizer, lr_schedulers, vloss=loss_val, log_metrics=logs_dict)
