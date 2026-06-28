@@ -7,10 +7,16 @@ import warnings
 import numpy as np
 from pathlib import Path
 from typing import Union
+import torch
+torch.set_flush_denormal(True)
 warnings.filterwarnings(
     "ignore", 
     message="Importing from timm.models.layers is deprecated, please import via timm.layers"
-    )
+)
+warnings.filterwarnings(
+    "ignore",
+    message="The value of the smallest subnormal"
+)
 
 from admmtor.eprocessing.dataload import ImageDataset
 from admmtor.modelbuild.denoiser import DivergentRestorer, DivergentRestorerResid
@@ -72,7 +78,7 @@ def load_model_from_ckpt(
     device: str
 ):
     print(f"Loading checkpoint from {ckpt_path}...")
-    checkpoint = torch.load(ckpt_path, map_location=device)
+    checkpoint = torch.load(ckpt_path, map_location=device, weights_only=False)
     
     # 1. Load Model State
     model.load_state_dict(checkpoint['model_state_dict'])
