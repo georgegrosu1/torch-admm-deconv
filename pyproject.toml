@@ -43,5 +43,12 @@ include = ["admmtor*"]
 [tool.setuptools.package-dir]
 "" = "src"
 
-[tool.uv]
-extra-index-url = ["https://download.pytorch.org/whl/cu126"]
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true  # CRITICAL: Prevents uv from looking here for normal packages like torchmetrics
+
+# 2. Pin torch and torchvision to only use that explicit index
+[tool.uv.sources]
+torch = { index = "pytorch-cu126" }
+torchvision = { index = "pytorch-cu126" }
