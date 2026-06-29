@@ -207,7 +207,7 @@ class DRANet(nn.Module):
         return torch.clamp(Z, 0, 1)
     
 
-def make_dranet(model_cfg, init_type='orthogonal', init_bn_type='uniform', gain=0.2):
-    model = DRANet(**model_cfg)
+def make_dranet(in_nc, out_nc, nc, bias, init_type='orthogonal', init_bn_type='uniform', gain=0.2):
+    model = DRANet(in_nc=in_nc, out_nc=out_nc, nc=nc, bias=bias)
     init_weights(model, init_type=init_type, init_bn_type=init_bn_type, gain=gain)
     return model

@@ -1,17 +1,11 @@
 {
-  "model_name": "swinir",
+  "model_name": "nafnet",
   "model_params":{
-    "upscale": 1,
-    "in_chans": 3,
-    "img_size": 128,
-    "window_size": 8,
-    "img_range": 1.0,
-    "depths": [6, 6, 6, 6, 6, 6],
-    "embed_dim": 180,
-    "num_heads": [6, 6, 6, 6, 6, 6],
-    "mlp_ratio": 2,
-    "upsampler": null,
-    "resi_connection": "1conv"
+    "img_channel": 3,
+    "width": 64,
+    "middle_blk_num": 12,
+    "enc_blk_nums": [2, 2, 4, 8],
+    "dec_blk_nums": [2, 2, 2, 2]
   },
   "train": {
     "ckpt": null,
@@ -26,7 +20,7 @@
   },
   "optimizer_params": [
     {
-      "optimizer": "adam",
+      "optimizer": "adamw",
       "cfgs": {
         "lr": 2e-4,
         "weight_decay": 0.0,
@@ -36,14 +30,15 @@
   ],
   "lr_params": [
     {
-      "scheduler": "multi_step_lr",
+      "scheduler": "cosine_annealing",
       "cfgs": {
-        "milestones": [800000, 1200000, 1400000, 1500000, 1600000],
-        "gamma": 0.5
+        "T_0": 400000,
+        "eta_min": 1e-7
       }
     }
   ],
   "im_shape": [128, 128],
-  "lossf": "charbonnier",
+  "lossf": "psnr_loss",
+  "lr": 2e-4,
   "epochs": 500
 }
