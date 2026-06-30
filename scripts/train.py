@@ -74,7 +74,7 @@ loss_funcs = {
     'cascade_resid_loss': CascadeResidLoss,
     'mse_loss': MSE,
     'psnr_loss': PSNRLoss,
-    'dsists_loss': DISTSMetric,
+    'ssim_dists_loss': SSIM_DISTS_Loss,
 }
 
 opt_funcs = {
@@ -230,7 +230,7 @@ def main():
 
     args_parser = argparse.ArgumentParser(description='Training script for image restoration')
     args_parser.add_argument('--config_file', '-c', type=str, help='Path to train config file',
-                             default=r'configs/dranet_cfg.json')
+                             default=r'configs/admm_cfg.json')
     args_parser.add_argument('--min_awgn', '-m', type=int, help='Min std for AWGN',
                              default=0)
     args_parser.add_argument('--max_awgn', '-M', type=int, help='Max std for AWGN',
