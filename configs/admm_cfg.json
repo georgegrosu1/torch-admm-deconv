@@ -64,6 +64,6 @@
     }
   ],
   "im_shape": [128, 128],
-  "lossf": "dists_loss",
+  "lossf": "ssim_dists_loss",
   "epochs": 500
 }
