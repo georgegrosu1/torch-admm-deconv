@@ -17,7 +17,7 @@ dependencies = [
     "prettytable==3.16.0",
     "scipy==1.14.1",
     "torch==2.12.0+cu126",
-    "torchmetrics==1.4.2",
+    "torchmetrics==1.8.2",
     "torchvision==0.27.0+cu126",
     "tqdm==4.66.5",
     "bm3d==4.0.3",

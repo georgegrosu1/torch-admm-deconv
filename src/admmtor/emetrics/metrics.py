@@ -8,6 +8,7 @@ from torchmetrics.image import (StructuralSimilarityIndexMeasure,
                                 PeakSignalNoiseRatio,
                                 UniversalImageQualityIndex,
                                 SpatialCorrelationCoefficient)
+from torchmetrics.image.dists import DeepImageStructureAndTextureSimilarity
 from torchmetrics.regression import MeanSquaredError
 from kornia.color import rgb_to_lab as kornia_rgb_to_lab
 
@@ -43,6 +44,17 @@ class SSIMLoss(Metric):
 
     def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
         return 1.0 - self._func(y_pred, y_true)
+    
+
+class DISTSLoss(Metric):
+    m_name = 'dists_loss'
+
+    def __init__(self, device: str):
+        super().__init__(device)
+        self._func = DeepImageStructureAndTextureSimilarity().to(device)
+
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self._func(y_pred, y_true)
 
 
 class MAELoss(Metric):
@@ -72,6 +84,17 @@ class SSIMMetric(Metric):
     def __init__(self, device: str, data_range=1.0):
         super().__init__(device)
         self._func = StructuralSimilarityIndexMeasure(data_range=data_range).to(device)
+
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self._func(y_pred, y_true)
+    
+    
+class DISTSMetric(Metric):
+    m_name = 'dists'
+
+    def __init__(self, device: str):
+        super().__init__(device)
+        self._func = DeepImageStructureAndTextureSimilarity().to(device)
 
     def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
         return self._func(y_pred, y_true)
