@@ -1,0 +1,40 @@
+{
+  "model_name": "dncnn",
+  "model_params":{
+    "upscale": 1,
+    "in_channels": 3,
+    "num_layers": 17,
+    "num_features": 64
+  },
+  "train": {
+    "ckpt": null,
+    "x_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\train\\y",
+    "y_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\train\\y",
+    "batch_size": 32
+  },
+  "eval": {
+    "x_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\test\\y",
+    "y_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\test\\y",
+    "batch_size": 32
+  },
+  "optimizer_params": [
+    {
+      "optimizer": "adam",
+      "cfgs": {
+        "lr": 1e-3
+      }
+    }
+  ],
+  "lr_params": [
+    {
+      "scheduler": "multi_step_lr",
+      "cfgs": {
+        "milestones": [800000, 1200000, 1400000, 1500000, 1600000],
+        "gamma": 0.5
+      }
+    }
+  ],
+  "im_shape": [128, 128],
+  "lossf": "mse_loss",
+  "epochs": 500
+}

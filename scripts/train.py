@@ -24,7 +24,7 @@ from admmtor.modelbuild.admm_fusion import ADMMFusion
 from admmtor.modelbuild.nafnet import NAFNet
 from admmtor.modelbuild.dranet import make_dranet
 from admmtor.modelbuild.swinir import SwinIR
-from admmtor.modelbuild.anet import ANet
+from admmtor.modelbuild.dncnn import DnCNN
 
 from admmtor.eprocessing.etransforms import (
     Scale, 
@@ -65,6 +65,7 @@ model_funcs = {
     'nafnet': NAFNet,
     'dranet': make_dranet,
     'swinir': SwinIR,
+    'dncnn': DnCNN,
 }
     
 loss_funcs = {
