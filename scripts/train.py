@@ -75,7 +75,8 @@ loss_funcs = {
     'cascade_resid_loss': CascadeResidLoss,
     'mse_loss': MSE,
     'psnr_loss': PSNRLoss,
-    'ssim_dists_loss': SSIM_DISTS_Loss,
+    'ssim_dists_loss': SSIMDISTSLoss,
+    'msssim_dists_loss': MSSSIMDISTSLoss,
 }
 
 opt_funcs = {

@@ -258,11 +258,11 @@ class FrequencyLoss(Metric):
         return self.forward(y_pred, y_true)
     
     
-class SSIM_DISTS_Loss(Metric):
+class SSIMDISTSLoss(Metric):
     m_name = 'ssim_dists_loss'
 
     def __init__(self, device: str='cuda', ssim_weight=0.8, dists_weight=0.2):
-        super(SSIM_DISTS_Loss, self).__init__(device)
+        super(SSIMDISTSLoss, self).__init__(device)
         self.ssim_weight = ssim_weight
         self.dists_weight = dists_weight
         self.ssim_loss = SSIMLoss(device=device)
@@ -273,6 +273,24 @@ class SSIM_DISTS_Loss(Metric):
         dists_loss_val = self.dists_loss(y_pred, y_true)
 
         total_loss = (self.ssim_weight * ssim_loss_val) + (self.dists_weight * dists_loss_val)
+        return total_loss
+    
+
+class MSSSIMDISTSLoss(Metric):
+    m_name = 'msssim_dists_loss'
+
+    def __init__(self, device: str='cuda', msssim_weight=0.8, dists_weight=0.2):
+        super(MSSSIMDISTSLoss, self).__init__(device)
+        self.msssim_weight = msssim_weight
+        self.dists_weight = dists_weight
+        self.msssim_loss = MSSSIMLoss(device=device)
+        self.dists_loss = DISTSLoss(device=device)
+
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        msssim_loss_val = self.msssim_loss(y_pred, y_true)
+        dists_loss_val = self.dists_loss(y_pred, y_true)
+
+        total_loss = (self.msssim_weight * msssim_loss_val) + (self.dists_weight * dists_loss_val)
         return total_loss
 
 
