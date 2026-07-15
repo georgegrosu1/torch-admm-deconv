@@ -11,7 +11,7 @@
       "max_iters": 100,
       "iso": true
     }],
-    "level_branches": [2, 8],
+    "level_branches": [2, 8, 32],
     "in_channels": 3,
     "final_channels": 3,
     "filters": 86,
@@ -19,7 +19,7 @@
     "attention_reduction": 8
   },
   "train": {
-    "ckpt": null,
+    "ckpt": "C:\\Users\\40774\\Dev\\torch-admm-deconv\\trained_models\\admm-bsd-div2k-15and35std-june-128-cwa-modif-2\\Tue-Jul-14-08_00_36-2026\\admm-bsd-div2k-15and35std-june-128-cwa-modif-2_epoch04_vloss0.1040.tar",
     "x_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\train\\y",
     "y_path": "C:\\Users\\40774\\Dev\\datasets\\rnind_bsd_div2k\\train\\y",
     "batch_size": 2
@@ -64,6 +64,6 @@
     }
   ],
   "im_shape": [128, 128],
-  "lossf": "msssim_dists_loss",
+  "lossf": "ssim_dists_loss",
   "epochs": 500
 }
