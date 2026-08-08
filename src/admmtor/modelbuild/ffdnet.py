@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
+import numpy as np
 from torch.autograd import Variable, Function
+from skimage.restoration import estimate_sigma
 
 
 def concatenate_input_noise_map(input, noise_sigma):
@@ -146,8 +148,7 @@ class IntermediateDnCNN(nn.Module):
 		return out
 
 class FFDNet(nn.Module):
-	r"""Implements the FFDNet architecture
-	"""
+	"""Implements the FFDNet architecture"""
 	def __init__(self, num_input_channels):
 		super(FFDNet, self).__init__()
 		self.num_input_channels = num_input_channels
@@ -172,7 +173,11 @@ class FFDNet(nn.Module):
 				num_conv_layers=self.num_conv_layers)
 		self.upsamplefeatures = UpSampleFeatures()
 
-	def forward(self, x, noise_sigma):
+	def forward(self, x, noise_sigma=None):
+		if noise_sigma is None:
+			# Estimate noise level if not provided
+			noise_sigma = estimate_sigma(x.detach().cpu().numpy(), channel_axis=1, average_sigmas=True)
+			noise_sigma = torch.FloatTensor([noise_sigma]).type_as(x.data)
 		concat_noise_x = concatenate_input_noise_map(\
 				x.data, noise_sigma.data)
 		concat_noise_x = Variable(concat_noise_x)
