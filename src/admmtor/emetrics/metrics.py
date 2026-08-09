@@ -2,6 +2,7 @@ from abc import ABC
 
 import torch
 import torch.nn as nn
+import numpy as np
 import torch.nn.functional as F
 from torchmetrics.image import (StructuralSimilarityIndexMeasure,
                                 MultiScaleStructuralSimilarityIndexMeasure,
@@ -9,7 +10,11 @@ from torchmetrics.image import (StructuralSimilarityIndexMeasure,
                                 UniversalImageQualityIndex,
                                 SpatialCorrelationCoefficient)
 from torchmetrics.image.dists import DeepImageStructureAndTextureSimilarity
+from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
+from torchmetrics.image.sam import SpectralAngleMapper
+from torchmetrics.image.arniqa import ARNIQA
 from torchmetrics.regression import MeanSquaredError
+from skimage.measure import blur_effect
 from kornia.color import rgb_to_lab as kornia_rgb_to_lab
 
 
@@ -103,9 +108,9 @@ class DISTSMetric(Metric):
 class MSSSIMMetric(Metric):
     m_name = 'msssim'
 
-    def __init__(self, device: str, data_range=1.0):
+    def __init__(self, device: str, betas: tuple = (0.0448, 0.2856, 0.3001, 0.2363, 0.1333), kern_size: int = 11, data_range: float = 1.0):
         super().__init__(device)
-        self._func = MultiScaleStructuralSimilarityIndexMeasure(data_range=data_range).to(device)
+        self._func = MultiScaleStructuralSimilarityIndexMeasure(data_range=data_range, kernel_size=kern_size, betas=betas).to(device)
 
     def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
         return self._func(y_pred, y_true)
@@ -142,6 +147,57 @@ class SCCMetric(Metric):
 
     def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
         return self._func(y_pred, y_true)
+    
+    
+class LPIPSMetric(Metric):
+    m_name = 'lpips'
+
+    def __init__(self, device: str):
+        super().__init__(device)
+        self._func = LearnedPerceptualImagePatchSimilarity(net_type='vgg', normalize=True).to(device)
+
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self._func(y_pred, y_true)
+    
+
+class SAMMetric(Metric):
+    m_name = 'sam'
+
+    def __init__(self, device: str):
+        super().__init__(device)
+        self._func = SpectralAngleMapper().to(device)
+
+    def __call__(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return self._func((y_pred - 0.5) / 0.5, (y_true - 0.5) / 0.5)
+    
+    
+class ARNIQAMetric(Metric):
+    m_name = 'arniqa'
+
+    def __init__(self, device: str):
+        super().__init__(device)
+        self._func = ARNIQA().to(device)
+
+    def __call__(self, y_pred: torch.Tensor):
+        return self._func(y_pred)
+    
+    
+class BlurEffectMetric(Metric):
+    m_name = 'blur_effect'
+
+    def __init__(self, device: str):
+        super().__init__(device)
+
+    def __call__(self, y_pred: torch.Tensor):
+        # Convert to numpy and compute blur effect
+        y_pred_np = y_pred.cpu().numpy()
+        blur_values = []
+        for img in y_pred_np:
+            # Assuming img is in shape (C, H, W), convert to (H, W, C) for skimage
+            img = np.transpose(img, (1, 2, 0))
+            blur_value = blur_effect(img, channel_axis=-1)
+            blur_values.append(blur_value)
+        return torch.tensor(blur_values).mean()
 
 
 class PSNRLoss(Metric):
