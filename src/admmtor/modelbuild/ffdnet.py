@@ -176,11 +176,13 @@ class FFDNet(nn.Module):
 	def forward(self, x, noise_sigma=None):
 		if noise_sigma is None:
 			# Estimate noise level if not provided
-			noise_sigma = estimate_sigma(x.detach().cpu().numpy(), channel_axis=1, average_sigmas=True)
-			noise_sigma = torch.FloatTensor([noise_sigma]).type_as(x.data)
+			x_arr = x.detach().cpu().numpy()[0]
+			noise_sigma = np.mean(estimate_sigma(x_arr, channel_axis=0))
+		noise_sigma = torch.FloatTensor([noise_sigma]).type_as(x)
 		concat_noise_x = concatenate_input_noise_map(\
 				x.data, noise_sigma.data)
 		concat_noise_x = Variable(concat_noise_x)
 		h_dncnn = self.intermediate_dncnn(concat_noise_x)
 		pred_noise = self.upsamplefeatures(h_dncnn)
-		return pred_noise
+		output = torch.clamp(x - pred_noise, 0., 1.)
+		return output
