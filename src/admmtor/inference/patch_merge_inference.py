@@ -18,7 +18,7 @@ def get_2d_hanning_window(window_size):
     # Add batch and channel dimensions (1, 1, H, W) for easy broadcasting
     return window_2d.unsqueeze(0).unsqueeze(0)
 
-def patch_based_inference(image, model, patch_size=128, stride=64):
+def patch_based_inference(image, model, patch_size: int | None =128, stride=64):
     """
     Performs overlapping patch-based inference with windowed blending.
     
@@ -34,7 +34,9 @@ def patch_based_inference(image, model, patch_size=128, stride=64):
     B, C, H, W = image.shape
     device = image.device
     
-    if isinstance(patch_size, int):
+    if patch_size is None:
+        patch_size = (H, W)
+    elif isinstance(patch_size, int):
         patch_size = (patch_size, patch_size)
     if isinstance(stride, int):
         stride = (stride, stride)
@@ -90,7 +92,7 @@ class PatchMergeInference:
     def __init__(self):
         pass
 
-    def infer(self, model, image: torch.Tensor, patch_size: int=128, stride: int=64) -> torch.Tensor:
+    def infer(self, model, image: torch.Tensor, patch_size: int | None =128, stride: int=64) -> torch.Tensor:
         """
         Perform inference on a single image using patch-based processing.
         
