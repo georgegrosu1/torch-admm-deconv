@@ -71,3 +71,41 @@ class AddAWGN(object):
         if self.both:
             return torch.clamp(x_img + awgn, self.minval, self.maxval), torch.clamp(y_img + awgn, self.minval, self.maxval)
         return torch.clamp(x_img + awgn, self.minval, self.maxval), y_img
+    
+    
+class AddPoisson(object):
+    def __init__(self,
+                 lam_range: tuple[int, int] = (1, 1),
+                 minval: float = 0.0,
+                 maxval: float = 1.0,
+                 both: bool = False):
+        self.lam_range = lam_range
+        self.minval = minval
+        self.maxval = maxval
+        self.both = both
+
+    def __call__(self, x_img, y_img) -> tuple[torch.Tensor, torch.Tensor]:
+        lam = torch.randint(self.lam_range[0], self.lam_range[1], (1,)).item() / 255.0
+        poisson_noise = torch.poisson(torch.ones(x_img.shape) * lam).to(x_img.device)
+        if self.both:
+            return torch.clamp(x_img + poisson_noise, self.minval, self.maxval), torch.clamp(y_img + poisson_noise, self.minval, self.maxval)
+        return torch.clamp(x_img + poisson_noise, self.minval, self.maxval), y_img
+    
+    
+class InversePoisson(object):
+    def __init__(self,
+                 lam_range: tuple[int, int] = (1, 1),
+                 minval: float = 0.0,
+                 maxval: float = 1.0,
+                 both: bool = False):
+        self.lam_range = lam_range
+        self.minval = minval
+        self.maxval = maxval
+        self.both = both
+
+    def __call__(self, x_img, y_img) -> tuple[torch.Tensor, torch.Tensor]:
+        lam = torch.randint(self.lam_range[0], self.lam_range[1], (1,)).item() / 255.0
+        inv_poisson_noise = torch.poisson(torch.ones(x_img.shape) * lam).to(x_img.device)
+        if self.both:
+            return torch.clamp(x_img - inv_poisson_noise, self.minval, self.maxval), torch.clamp(y_img - inv_poisson_noise, self.minval, self.maxval)
+        return torch.clamp(x_img - inv_poisson_noise, self.minval, self.maxval), y_img
