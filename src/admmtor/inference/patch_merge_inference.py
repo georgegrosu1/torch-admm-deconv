@@ -56,8 +56,11 @@ def patch_based_inference(image, model, patch_size: int | None =128, stride=64):
     output_buffer = torch.zeros_like(padded_image).to(device)
     weight_buffer = torch.zeros_like(padded_image).to(device)
     
-    # 3. Create the 2D weighting window and move to the same device as the image
-    window = get_2d_hanning_window((patch_h, patch_w)).to(device)
+    # 3. Keep edge weights nonzero so pixels covered only by a boundary patch
+    # are not divided by zero (which previously produced black borders).
+    window = get_2d_hanning_window((patch_h, patch_w)).to(
+        device=device, dtype=image.dtype
+    ).clamp_min(torch.finfo(image.dtype).eps)
     
     # 4. Extract, process, and blend patches
     with torch.inference_mode():

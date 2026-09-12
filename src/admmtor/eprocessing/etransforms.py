@@ -84,25 +84,37 @@ class AddRealisticSensorNoise(object):
     per transform call, making it suitable for noise-level augmentation.
 
     Args:
-        full_well_range: Sensor capacity in electrons. Select the camera's
-            full-well range; larger values give less relative shot noise.
+        full_well_range: Sensor capacity in electrons (Poisson/shot-noise
+            scale). Typical values are 1,000--100,000 electrons for small
+            scientific or industrial pixels; smartphone pixels are often
+            around 5,000--20,000 electrons.
         read_noise_std_range: Gaussian read-noise standard deviation expressed
             in 8-bit intensity units (0--255), matching the convention used by
             classic AWGN denoising benchmarks (for example, 15, 25, or 35).
-            Internally this is converted to electrons via the sampled
-            full-well capacity.
-        dark_current_range: Dark electrons added to every pixel. Choose based
-            on exposure temperature/time; use zero when negligible.
-        prnu_std_range: Relative pixel-response standard deviation (for
-            example, 0.01 means 1%). Use the measured PRNU or zero to disable.
-        row_noise_std_range: Standard deviation of row-correlated noise in
-            electrons. Use the measured row pattern level, or zero if absent.
-        quantization_bits: ADC bit depth (1--24), typically the camera's
-            value. Use ``None`` to disable quantization.
-        minval: Minimum intensity represented by the input/output images.
-        maxval: Maximum intensity represented by the input/output images.
+            This is the additive AWGN/read-noise component; typical values
+            are 1--10 units for low-noise scientific cameras and 10--35 for
+            consumer or benchmark-style augmentation. Internally it is
+            converted to electrons via the sampled full-well capacity.
+        dark_current_range: Dark electrons added to every pixel (Poisson-like
+            dark-current component). Typical values are 0--10 electrons per
+            exposure for cooled sensors and 10--1,000 for warm or long
+            exposures; use zero when negligible.
+        prnu_std_range: Relative pixel-response standard deviation (nonuniform
+            fixed-pattern noise; 0.01 means 1%). Typical values are 0.1%--2%
+            (0.001--0.02); use zero to disable PRNU.
+        row_noise_std_range: Standard deviation of row-correlated read noise
+            in electrons (structured/nonuniform read noise). Typical values
+            are 0--5 electrons, though poorly calibrated sensors can be
+            higher; use zero if row pattern noise is absent.
+        quantization_bits: ADC bit depth (quantization noise; 1--24), usually
+            10--16 bits in real cameras. Use ``None`` to disable quantization.
+        minval: Minimum intensity represented by the input/output images,
+            usually 0.0 for normalized or black-level-corrected data.
+        maxval: Maximum intensity represented by the input/output images,
+            usually 1.0 for normalized data or 255.0 for 8-bit data.
         both: If true, apply the sampled sensor conditions to both images;
-            otherwise only ``x_img`` is modified.
+            otherwise only ``x_img`` is modified. This is useful for paired
+            data, but typically remains false when ``y_img`` is a clean target.
     """
 
     def __init__(
