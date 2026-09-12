@@ -11,11 +11,13 @@ class ImageDataset(Dataset):
     def __init__(self,
                  x_source: Path,
                  y_source: Path,
-                 transforms: List=None):
+                 transforms: List=None,
+                 to_grayscale: bool=False):
 
         self.x_source = x_source
         self.y_source = y_source
         self.transforms = transforms
+        self.to_grayscale = to_grayscale
 
         self.x_paths = np.array(list(x_source.glob("*")))
         self.y_paths = np.array(list(y_source.glob("*")))
@@ -27,6 +29,10 @@ class ImageDataset(Dataset):
     def __getitem__(self, idx: int):
         x_im = read_image(str(self.x_paths[idx])).to(torch.float32)
         y_im = read_image(str(self.y_paths[idx])).to(torch.float32)
+
+        if self.to_grayscale:
+            x_im = x_im.mean(dim=0, keepdim=True)
+            y_im = y_im.mean(dim=0, keepdim=True)
 
         if self.transforms is not None:
             for transform in self.transforms:
