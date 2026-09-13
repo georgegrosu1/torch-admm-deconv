@@ -189,13 +189,17 @@ class BlurEffectMetric(Metric):
         super().__init__(device)
 
     def __call__(self, y_pred: torch.Tensor):
-        # Convert to numpy and compute blur effect
-        y_pred_np = y_pred.cpu().numpy()
+        y_pred_np = y_pred.detach().cpu().numpy()
         blur_values = []
         for img in y_pred_np:
-            # Assuming img is in shape (C, H, W), convert to (H, W, C) for skimage
-            img = np.transpose(img, (1, 2, 0))
-            blur_value = blur_effect(img, channel_axis=-1)
+            if img.shape[0] == 1:
+                image = img[0]
+                channel_axis = None
+            else:
+                image = np.moveaxis(img, 0, -1)
+                channel_axis = -1
+
+            blur_value = blur_effect(image, channel_axis=channel_axis)
             blur_values.append(blur_value)
         return torch.tensor(blur_values).mean()
 

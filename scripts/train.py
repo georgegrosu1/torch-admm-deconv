@@ -19,8 +19,7 @@ warnings.filterwarnings(
 )
 
 from admmtor.eprocessing.dataload import ImageDataset
-from admmtor.modelbuild.denoiser import DivergentRestorer, DivergentRestorerResid
-from admmtor.modelbuild.admm_fusion import ADMMFusion
+from admmtor.modelbuild.denoiser import DivergentRestorer
 from admmtor.modelbuild.nafnet import NAFNet
 from admmtor.modelbuild.dranet import make_dranet
 from admmtor.modelbuild.swinir import SwinIR
