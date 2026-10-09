@@ -7,6 +7,7 @@ Created on Fri May 16 09:13:27 2025
 @author: Romulus Terebes
 """
  
+import argparse
 import os
 import random
  
@@ -16,8 +17,25 @@ import pandas as pd
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
- 
- 
+
+
+# ---------------------------------------------------------------------
+# Command-line arguments
+# ---------------------------------------------------------------------
+
+parser = argparse.ArgumentParser(
+    description="Train the DnCNN denoising model."
+)
+parser.add_argument(
+    "-m",
+    "--mode",
+    choices=("cpu", "gpu"),
+    default="gpu" if torch.cuda.is_available() else "cpu",
+    help="Training device (default: automatically select gpu when available)."
+)
+args = parser.parse_args()
+
+
 # ---------------------------------------------------------------------
 # Reproducibility
 # ---------------------------------------------------------------------
@@ -36,7 +54,13 @@ if torch.cuda.is_available():
 # Device selection
 # ---------------------------------------------------------------------
  
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if args.mode == "gpu":
+    if not torch.cuda.is_available():
+        parser.error("GPU mode was requested, but CUDA is not available.")
+
+    device = torch.device("cuda")
+else:
+    device = torch.device("cpu")
  
 print(f"Using device: {device}")
  
@@ -228,7 +252,7 @@ train_loader = DataLoader(
     batch_size=BATCH_SIZE,
     shuffle=True,
     num_workers=0,
-    pin_memory=torch.cuda.is_available()
+    pin_memory=device.type == "cuda"
 )
  
 validation_loader = DataLoader(
@@ -236,7 +260,7 @@ validation_loader = DataLoader(
     batch_size=BATCH_SIZE,
     shuffle=False,
     num_workers=0,
-    pin_memory=torch.cuda.is_available()
+    pin_memory=device.type == "cuda"
 )
  
  
