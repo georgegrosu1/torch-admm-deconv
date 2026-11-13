@@ -182,29 +182,6 @@ def init_training(config_file: str, min_std: int, max_std: int, save_dir: str, m
     save_dir_path = os.getcwd() + f'/{save_dir}'
     net_saver = NNSaver(save_dir_path, model_name)
     
-    # model = DivergentRestorer(**train_cfg['model_params'])
-    # model.to(device)
-    # model = ANet(**train_cfg['model_params'])
-    
-    # model = NAFNet(img_channel=3, width=64, middle_blk_num=12,
-    #                enc_blk_nums=[2, 2, 4, 8], dec_blk_nums=[2, 2, 2, 2])
-    
-    # model = make_dranet(train_cfg['model_params'])
-    # model = SwinIR(**train_cfg['model_params'])
-
-    # params_1d = [p for p in model.parameters() if p.requires_grad and p.dim() != 2]
-    # params_2d = [p for p in model.parameters() if p.requires_grad and p.dim() == 2]
-    
-    # opt_adamw = torch.optim.AdamW(params_1d, train_cfg['lr'], betas=(0.9, 0.9), eps=1e-12, weight_decay=1e-5)
-    # opt_muon = torch.optim.Muon(params_2d, train_cfg['lr'], momentum=0.95, weight_decay=1e-5)
-
-    # lr_scheduler_adamw = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt_adamw, T_0=150000, eta_min=1e-11)
-    # lr_scheduler_muon = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(opt_muon, T_0=150000, eta_min=1e-11)
-    
-    # Group them into lists for cleaner passing
-    # optimizers_list = [opt_adamw, opt_muon]
-    # schedulers_list = [lr_scheduler_adamw, lr_scheduler_muon]
-    
     model, optimizers_list, schedulers_list, loss_func = init_training_objects(train_cfg, device)
 
     # 2. THEN, if a checkpoint exists, load the states INTO the objects
