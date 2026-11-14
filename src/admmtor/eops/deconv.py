@@ -28,8 +28,8 @@ def pixelnorm(x: torch.Tensor) -> torch.Tensor:
 def iso_thresh(vx: torch.Tensor, vy: torch.Tensor, tau: torch.Tensor,
                eps: float = 1e-12) -> Tuple[torch.Tensor, torch.Tensor]:
     """Isotropic TV shrinkage: norm over (dx, dy) per sample, channel and pixel."""
-    mag = torch.sqrt((vx * vx + vy * vy).sum(dim=1, keepdim=True) + eps, dtype=vx.dtype, device=vx.device)
-    scale = torch.clamp(1.0 - tau / mag, min=0.0, dtype=vx.dtype, device=vx.device)
+    mag = torch.sqrt((vx * vx + vy * vy).sum(dim=1, keepdim=True) + eps)
+    scale = torch.clamp(1.0 - tau / mag, min=0.0)
     return scale * vx, scale * vy
 
 
