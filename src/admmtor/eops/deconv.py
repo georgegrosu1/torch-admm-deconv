@@ -55,7 +55,9 @@ def fft_admm_tv(xin: torch.Tensor,
 
     B, C, H_im, W_im = xin.shape
 
-    tau = lmbd / rho
+    # lmbd / rho hold either one value (shared by all iterations) or one value per iteration
+    lmbd = lmbd.expand(maxit) if lmbd.numel() == 1 else lmbd
+    rho = rho.expand(maxit) if rho.numel() == 1 else rho
 
     if kern.numel() == 0:
         sigma = torch.tensor([1], dtype=xin.dtype, device=xin.device)
@@ -68,7 +70,8 @@ def fft_admm_tv(xin: torch.Tensor,
     delta_dx = torch.fft.rfftn(dx_base, s=(1,1,H_im,W_im))
     delta_dy = torch.fft.rfftn(dy_base, s=(1,1,H_im,W_im))
 
-    freq_c = 1 / (torch_abs2(sigma) + rho * (torch_abs2(delta_dx) + torch_abs2(delta_dy)))
+    sigma_abs2 = torch_abs2(sigma)
+    delta_abs2 = torch_abs2(delta_dx) + torch_abs2(delta_dy)
 
     thresh = iso_thresh if iso else aniso_thresh
 
@@ -114,8 +117,16 @@ def fft_admm_tv(xin: torch.Tensor,
 
         H_t = htran
 
-    for _ in torch.arange(0, maxit):
-        rfft_term = torch.fft.rfftn(H_t(xin) + rho * (Dx_t(z_x-u_x) + Dy_t(z_y-u_y)), dim=(2,3))
+    for k in range(maxit):
+        rho_k = rho[k]
+        tau = lmbd[k] / rho_k
+        freq_c = 1 / (sigma_abs2 + rho_k * delta_abs2)
+        if k > 0:
+            # scaled dual variable must be rescaled when rho changes between iterations
+            u_x = u_x * (rho[k - 1] / rho_k)
+            u_y = u_y * (rho[k - 1] / rho_k)
+
+        rfft_term = torch.fft.rfftn(H_t(xin) + rho_k * (Dx_t(z_x-u_x) + Dy_t(z_y-u_y)), dim=(2,3))
 
         x = torch.fft.irfftn(freq_c * rfft_term, (H_im, W_im), dim=(2,3))
 
