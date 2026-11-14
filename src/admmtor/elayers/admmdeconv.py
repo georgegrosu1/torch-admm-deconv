@@ -72,5 +72,14 @@ class ADMMDeconv(torch.nn.Module):
         super()._load_from_state_dict(state_dict, prefix, *args, **kwargs)
 
 
+    @torch.no_grad()
+    def _project_positive(self, min_val: float = 1e-12):
+        # projected gradient step: trainable lmbda / rho are pushed back to >= min_val before every use
+        for param in (self.lmbda, self.rho):
+            if isinstance(param, torch.nn.Parameter):
+                param.clamp_(min=min_val)
+
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        self._project_positive()
         return self.activation(fft_admm_tv(x, self.lmbda, self.rho, self.w, self.iso, self.max_iters) + self.b)
