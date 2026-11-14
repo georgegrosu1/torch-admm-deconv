@@ -21,7 +21,21 @@ def block_thresh(x: torch.Tensor, tau: torch.Tensor) -> torch.Tensor:
 
 
 def pixelnorm(x: torch.Tensor) -> torch.Tensor:
+    # Legacy: sums over batch and channel (batch-dependent). Kept for legacy_iso=True.
     return torch.sqrt(torch.sum(x ** 2, (0, 1)) + 1e-15)
+
+
+def iso_thresh(vx: torch.Tensor, vy: torch.Tensor, tau: torch.Tensor,
+               eps: float = 1e-12) -> Tuple[torch.Tensor, torch.Tensor]:
+    """Isotropic TV shrinkage: norm over (dx, dy) per sample, channel and pixel."""
+    mag = torch.sqrt(vx * vx + vy * vy + eps, dtype=vx.dtype, device=vx.device)
+    scale = torch.clamp(1.0 - tau / mag, min=0.0, dtype=vx.dtype, device=vx.device)
+    return scale * vx, scale * vy
+
+
+def aniso_thresh(vx: torch.Tensor, vy: torch.Tensor,
+                 tau: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    return soft_thresh(vx, tau), soft_thresh(vy, tau)
 
 
 def identity(x: torch.Tensor) -> torch.Tensor:
@@ -56,7 +70,7 @@ def fft_admm_tv(xin: torch.Tensor,
 
     freq_c = 1 / (torch_abs2(sigma) + rho * (torch_abs2(delta_dx) + torch_abs2(delta_dy)))
 
-    thresh = block_thresh if iso else soft_thresh
+    thresh = iso_thresh if iso else aniso_thresh
 
     x = torch.zeros_like(xin, dtype=xin.dtype, device=xin.device)
 
@@ -108,8 +122,7 @@ def fft_admm_tv(xin: torch.Tensor,
         dx_k = Dx(x)
         dy_k = Dy(x)
 
-        z_x = thresh(dx_k + u_x, tau)
-        z_y = thresh(dy_k + u_y, tau)
+        z_x, z_y = thresh(dx_k + u_x, dy_k + u_y, tau)
 
         u_x += dx_k - z_x
         u_y += dy_k - z_y
